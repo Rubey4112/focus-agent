@@ -21,6 +21,8 @@ Step 3: Verification
 - If the user is not doing actual jumping jacks, then notify the user that they need to do more jumping jacks
 
 
-Todo:
-1. Program the jumping jack detection on the Free-Wili OG: This will be the first thing to do since the rest of the project depend on this working.
-2. Program the Free-Wili OG to do wireless communication with a laptop. Currently, sending only jumping jack count to laptop (TBR)
+Todo / Implementation Status:
+1. [COMPLETED] Jumping jack detection on Free-Wili OG Display CPU (`wiliOGbsp/apps/focus_agent/display/main.c`): Real-time finite state machine tracking thrust, flight, and landing via LIS3DH accelerometer with visual gauge on ST7789 LCD.
+2. [COMPLETED] Free-Wili OG Telemetry Forwarding (`wiliOGbsp/apps/focus_agent/main/main.c` & `common/link/jj_proto.h`): Streams framed jumping jack telemetry across inter-CPU link (UART0) and outputs JSON over Breakout UART1 (GPIO 8/9).
+3. [COMPLETED] Bottlenose Orca / ESP32 Wireless Bridge (`firmware/bottlenose_bridge/bottlenose_bridge.ino`): BLE GATT server broadcasting telemetry to laptop.
+4. [COMPLETED] Laptop Focus Agent & OpenCV Detector (`agent/doomscroll_detector.py` & `agent/focus_agent.py`): Computer vision posture/phone sentinel with military officer voice reprimands and jump verification.

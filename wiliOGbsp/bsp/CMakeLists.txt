@@ -40,6 +40,7 @@ add_library(fwog_common STATIC
     common/link/link_frame.c
     common/link/bl_proto.c
     common/link/io_proto.c
+    common/link/jj_proto.c
     common/diag.c
     common/io_cfg.c
     common/io_pins.c

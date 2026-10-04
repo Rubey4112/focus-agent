@@ -1,11 +1,41 @@
 #include "fwog_display.h"
 #include "pico/stdlib.h"
+#include "common/link/jj_proto.h"
+#include "common/link/link_uart.h"
+#include "common/link/link_frame.h"
+#include "audio/i2s_audio.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 /* Red held 6 s powers the board off, with the LED countdown on the WS2812 bar. */
 FWOG_POWER_DEFAULT();
+
+static uint8_t s_jj_seq = 0;
+static void send_telemetry(uint16_t count, uint16_t target, uint8_t state, uint16_t accel_mg, uint16_t peak_mg) {
+    uint8_t payload[sizeof(fwog_jj_telemetry_msg_t)];
+    size_t n = fwog_jj_proto_build_telemetry(payload, sizeof(payload), s_jj_seq++,
+                                             count, target, state, accel_mg, peak_mg);
+    if (n) {
+        (void)fwog_link_uart_send_frame(payload, n);
+    }
+}
+
+#include "drill_sergeant_audio.h"
+
+static float s_voice_gain = 4.8f; /* Boost 8-bit audio across full 16-bit DAC dynamic range (+13.6 dB) */
+
+static void play_alert_sound(uint8_t sound_id) {
+    const drill_voice_clip_t *clip = drill_voice_get(sound_id);
+    if (clip && clip->samples && clip->count > 0) {
+        DIAG("[focus_agent] Playing vocal speech: %s (%u samples, gain=%.1f)\n",
+             clip->name, clip->count, (double)s_voice_gain);
+        i2s_audio_stop();
+        i2s_audio_set_volume(10);
+        i2s_audio_set_asset_gain(s_voice_gain);
+        i2s_audio_start(clip->samples, clip->count, true, true);
+    }
+}
 
 /* ---- Display Palette (RGB565) ---- */
 #define COL_BG          st7789_rgb565(12, 16, 26)       /* Deep Obsidian Navy */
@@ -149,8 +179,19 @@ int main(void) {
     /* Initialize LIS3DH accelerometer (±4g range) */
     lis3dh_init();
     const bool accel_ok = lis3dh_configure(LIS3DH_RANGE_4G);
-    DIAG("[focus_agent] hardware init: lcd=%s ws2812=%s lis3dh=%s\n",
-         st7789_ready() ? "ok" : "fail", ws_ok ? "ok" : "fail", accel_ok ? "ok" : "fail");
+
+    /* Initialize inter-CPU link for telemetry forwarding */
+    const bool link_ok = fwog_link_uart_init(FWOG_LINK_BAUD);
+
+    /* Initialize MAX98357A I2S speaker driver on PIO0 SM1 */
+    const bool audio_ok = i2s_audio_init(pio0, 1u);
+    if (audio_ok) {
+        i2s_audio_set_volume(10);
+    }
+
+    DIAG("[focus_agent] hardware init: lcd=%s ws2812=%s lis3dh=%s link=%s audio=%s\n",
+         st7789_ready() ? "ok" : "fail", ws_ok ? "ok" : "fail", accel_ok ? "ok" : "fail",
+         link_ok ? "ok" : "fail", audio_ok ? "ok" : "fail");
 
     /* Application State */
     uint32_t count = 0;
@@ -178,6 +219,7 @@ int main(void) {
 
     absolute_time_t next_ui_update = make_timeout_time_ms(30);
     absolute_time_t next_diag_heartbeat = make_timeout_time_ms(2000);
+    absolute_time_t next_telemetry_time = make_timeout_time_ms(100);
 
     while (true) {
         const uint32_t now_ms = to_ms_since_boot(get_absolute_time());
@@ -190,14 +232,17 @@ int main(void) {
             count = 0;
             flash_until_ms = now_ms + 250;
             DIAG("[focus_agent] Counter reset to 0\n");
+            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
         }
         if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_BLUE)) {
             if (target < 100) target += 5;
             DIAG("[focus_agent] Target increased to %u\n", (unsigned)target);
+            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
         }
         if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_YELLOW)) {
             if (target > 5) target -= 5;
             DIAG("[focus_agent] Target decreased to %u\n", (unsigned)target);
+            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
         }
         if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_GRAY)) {
             sens = (sens + 1) % SENS_COUNT;
@@ -281,6 +326,10 @@ int main(void) {
 
                         DIAG("[focus_agent] JUMP DETECTED! Count: %u, Peak: %u mg, Flight: %u ms\n",
                              (unsigned)count, (unsigned)last_jump_peak_mg, (unsigned)flight_dur);
+                        send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
+                        if (count == target) {
+                            play_alert_sound(FWOG_JJ_SOUND_VICTORY);
+                        }
                     } else {
                         state = JJ_STATE_IDLE;
                     }
@@ -461,6 +510,49 @@ int main(void) {
             next_diag_heartbeat = make_timeout_time_ms(3000);
             DIAG("[focus_agent] count=%u target=%u r=%u state=%d\n",
                  (unsigned)count, (unsigned)target, (unsigned)r_smooth_mg, state);
+        }
+
+        /* 7. Periodic telemetry over inter-CPU link (10 Hz) */
+        if (time_reached(next_telemetry_time)) {
+            next_telemetry_time = make_timeout_time_ms(100);
+            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state,
+                           (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
+        }
+
+        /* 8. Advance I2S speaker DMA playback */
+        i2s_audio_process();
+
+        /* 9. Process incoming commands from Main CPU (target sync, audio triggers) */
+        static fwog_link_rx_t s_cmd_rx;
+        uint8_t cmd_b;
+        while (fwog_link_uart_read(&cmd_b)) {
+            size_t n = 0;
+            if (fwog_link_rx_byte(&s_cmd_rx, cmd_b, &n)) {
+                uint8_t t = fwog_jj_proto_type(s_cmd_rx.buf, n);
+                if (t == FWOG_JJ_MSG_SET_TARGET) {
+                    const fwog_jj_set_target_msg_t *m = (const fwog_jj_set_target_msg_t *)s_cmd_rx.buf;
+                    target = m->target;
+                    if (m->reset_count) {
+                        count = 0;
+                        flash_until_ms = now_ms + 250;
+                    }
+                    DIAG("[focus_agent] TARGET SYNC FROM LAPTOP: %u (reset=%u)\n",
+                         (unsigned)target, (unsigned)m->reset_count);
+                    send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state,
+                                   (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
+                } else if (t == FWOG_JJ_MSG_PLAY_SOUND) {
+                    const fwog_jj_play_sound_msg_t *m = (const fwog_jj_play_sound_msg_t *)s_cmd_rx.buf;
+                    DIAG("[focus_agent] PLAY SOUND COMMAND: %u\n", (unsigned)m->sound_id);
+                    play_alert_sound(m->sound_id);
+                } else if (t == FWOG_JJ_MSG_SET_VOLUME) {
+                    const fwog_jj_set_volume_msg_t *m = (const fwog_jj_set_volume_msg_t *)s_cmd_rx.buf;
+                    /* Scale 0-100% to 0.0 - 4.8f gain */
+                    s_voice_gain = ((float)m->volume_pct / 100.0f) * 4.8f;
+                    if (s_voice_gain < 0.05f) s_voice_gain = 0.0f;
+                    DIAG("[focus_agent] VOLUME SYNC FROM LAPTOP: %u%% (gain=%.2f)\n",
+                         (unsigned)m->volume_pct, (double)s_voice_gain);
+                }
+            }
         }
 
         sleep_ms(2);

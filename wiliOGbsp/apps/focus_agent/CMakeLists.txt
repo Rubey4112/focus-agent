@@ -1,7 +1,7 @@
 # The skeleton `fw new-app` copies. A display app and its main companion are
 # ONE deliverable -- the main UF2 carries the display image inside it -- so
 # they live in one folder and are declared by one file, display first.
-add_executable(focus_agent_display display/main.c)
+add_executable(focus_agent_display display/main.c display/drill_sergeant_audio.c)
 target_link_libraries(focus_agent_display fwog_display_bsp)
 # stdio off UART0, linked at the bootloader's 0x10021000 app offset, and
 # UF2/bin/map outputs. Every display app must call this.
