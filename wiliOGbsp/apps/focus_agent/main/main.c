@@ -17,6 +17,64 @@ FWOG_WATCHDOG_DEFAULT();
 
 #define BREAKOUT_UART_BAUD 115200u
 
+static void process_cmd_str(const char *buf, uint8_t *p_cmd_seq) {
+    if (!buf || !*buf) return;
+
+    /* Parse target configuration: e.g. {"cmd":"set_target","target":15} */
+    if (strstr(buf, "target") != NULL) {
+        const char *p = strstr(buf, "target");
+        while (*p && (*p < '0' || *p > '9')) p++;
+        if (*p) {
+            int new_target = atoi(p);
+            if (new_target > 0) {
+                uint8_t frame[16];
+                size_t fn = fwog_jj_proto_build_set_target(
+                    frame, sizeof(frame), (*p_cmd_seq)++, (uint16_t)new_target, true);
+                if (fn) {
+                    (void)fwog_link_uart_send_frame(frame, fn);
+                }
+                DIAG("[focus_agent_main] Synced target %d to Display CPU\n", new_target);
+            }
+        }
+    }
+
+    /* Parse sound trigger: e.g. {"cmd":"play_sound","sound":1} */
+    if (strstr(buf, "play") != NULL || strstr(buf, "sound") != NULL) {
+        const char *p = strstr(buf, "sound");
+        if (!p) p = strstr(buf, "play");
+        while (*p && (*p < '0' || *p > '9')) p++;
+        int snd_id = *p ? atoi(p) : 1;
+        if (snd_id > 0) {
+            uint8_t frame[16];
+            size_t fn = fwog_jj_proto_build_play_sound(
+                frame, sizeof(frame), (*p_cmd_seq)++, (uint8_t)snd_id);
+            if (fn) {
+                (void)fwog_link_uart_send_frame(frame, fn);
+            }
+            DIAG("[focus_agent_main] Sent sound trigger %d to Display CPU\n", snd_id);
+        }
+    }
+
+    /* Parse volume command: e.g. {"cmd":"set_volume","volume":100} */
+    if (strstr(buf, "volume") != NULL || strstr(buf, "vol") != NULL) {
+        const char *p = strstr(buf, "volume");
+        if (!p) p = strstr(buf, "vol");
+        while (*p && (*p < '0' || *p > '9')) p++;
+        if (*p) {
+            int vol_pct = atoi(p);
+            if (vol_pct >= 0) {
+                uint8_t frame[16];
+                size_t fn = fwog_jj_proto_build_set_volume(
+                    frame, sizeof(frame), (*p_cmd_seq)++, (uint8_t)vol_pct);
+                if (fn) {
+                    (void)fwog_link_uart_send_frame(frame, fn);
+                }
+                DIAG("[focus_agent_main] Sent volume %d%% to Display CPU\n", vol_pct);
+            }
+        }
+    }
+}
+
 int main(void) {
     board_init();
 
@@ -44,6 +102,8 @@ int main(void) {
     /* Buffer for incoming command lines from Breakout UART1 (ESP32/Laptop) */
     static char s_uart1_buf[128];
     static size_t s_uart1_pos = 0;
+    static char s_usb_buf[128];
+    static size_t s_usb_pos = 0;
     static uint8_t s_cmd_seq = 0;
 
     absolute_time_t next_heartbeat = make_timeout_time_ms(3000);
@@ -67,6 +127,9 @@ int main(void) {
                         (unsigned)m->accel_mag_mg, (unsigned)m->peak_g_mg);
                     if (len > 0) {
                         uart_puts(uart1, json);
+                        /* Also output raw JSON to USB CDC stdout for direct laptop connection */
+                        printf("%s", json);
+                        fflush(stdout);
                     }
 
                     /* Also output to USB CDC DIAG for host debugging */
@@ -83,65 +146,26 @@ int main(void) {
             if (c == '\n' || c == '\r') {
                 if (s_uart1_pos > 0) {
                     s_uart1_buf[s_uart1_pos] = '\0';
-
-                    /* Parse target configuration: e.g. {"cmd":"set_target","target":15} */
-                    if (strstr(s_uart1_buf, "target") != NULL) {
-                        char *p = strstr(s_uart1_buf, "target");
-                        while (*p && (*p < '0' || *p > '9')) p++;
-                        if (*p) {
-                            int new_target = atoi(p);
-                            if (new_target > 0) {
-                                uint8_t frame[16];
-                                size_t fn = fwog_jj_proto_build_set_target(
-                                    frame, sizeof(frame), s_cmd_seq++, (uint16_t)new_target, true);
-                                if (fn) {
-                                    (void)fwog_link_uart_send_frame(frame, fn);
-                                }
-                                DIAG("[focus_agent_main] Synced target %d to Display CPU\n", new_target);
-                            }
-                        }
-                    }
-
-                    /* Parse sound trigger: e.g. {"cmd":"play_sound","sound":1} */
-                    if (strstr(s_uart1_buf, "play") != NULL || strstr(s_uart1_buf, "sound") != NULL) {
-                        char *p = strstr(s_uart1_buf, "sound");
-                        if (!p) p = strstr(s_uart1_buf, "play");
-                        while (*p && (*p < '0' || *p > '9')) p++;
-                        int snd_id = *p ? atoi(p) : 1;
-                        if (snd_id > 0) {
-                            uint8_t frame[16];
-                            size_t fn = fwog_jj_proto_build_play_sound(
-                                frame, sizeof(frame), s_cmd_seq++, (uint8_t)snd_id);
-                            if (fn) {
-                                (void)fwog_link_uart_send_frame(frame, fn);
-                            }
-                            DIAG("[focus_agent_main] Sent sound trigger %d to Display CPU\n", snd_id);
-                        }
-                    }
-
-                    /* Parse volume command: e.g. {"cmd":"set_volume","volume":100} */
-                    if (strstr(s_uart1_buf, "volume") != NULL || strstr(s_uart1_buf, "vol") != NULL) {
-                        char *p = strstr(s_uart1_buf, "volume");
-                        if (!p) p = strstr(s_uart1_buf, "vol");
-                        while (*p && (*p < '0' || *p > '9')) p++;
-                        if (*p) {
-                            int vol_pct = atoi(p);
-                            if (vol_pct >= 0) {
-                                uint8_t frame[16];
-                                size_t fn = fwog_jj_proto_build_set_volume(
-                                    frame, sizeof(frame), s_cmd_seq++, (uint8_t)vol_pct);
-                                if (fn) {
-                                    (void)fwog_link_uart_send_frame(frame, fn);
-                                }
-                                DIAG("[focus_agent_main] Sent volume %d%% to Display CPU\n", vol_pct);
-                            }
-                        }
-                    }
-
+                    process_cmd_str(s_uart1_buf, &s_cmd_seq);
                     s_uart1_pos = 0;
                 }
             } else if (s_uart1_pos + 1 < sizeof(s_uart1_buf)) {
                 s_uart1_buf[s_uart1_pos++] = c;
+            }
+        }
+
+        /* 3. Read incoming commands from USB CDC stdin (direct laptop USB cable) */
+        int usb_c;
+        while ((usb_c = getchar_timeout_us(0)) >= 0) {
+            char c = (char)usb_c;
+            if (c == '\n' || c == '\r') {
+                if (s_usb_pos > 0) {
+                    s_usb_buf[s_usb_pos] = '\0';
+                    process_cmd_str(s_usb_buf, &s_cmd_seq);
+                    s_usb_pos = 0;
+                }
+            } else if (s_usb_pos + 1 < sizeof(s_usb_buf)) {
+                s_usb_buf[s_usb_pos++] = c;
             }
         }
 

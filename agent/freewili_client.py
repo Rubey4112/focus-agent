@@ -71,11 +71,33 @@ class FreeWiliClient:
         self._mode = "none"
 
     def _handle_payload(self, text: str):
-        t = FreeWiliTelemetry.from_json(text)
-        if t:
-            self.latest_telemetry = t
-            if self.on_telemetry:
-                self.on_telemetry(t)
+        if not text:
+            return
+        for line in text.splitlines():
+            line = line.strip()
+            if not line:
+                continue
+            if line.startswith("{"):
+                t = FreeWiliTelemetry.from_json(line)
+                if t:
+                    self.latest_telemetry = t
+                    if self.on_telemetry:
+                        self.on_telemetry(t)
+            elif line.startswith("[telemetry]"):
+                try:
+                    parts = dict(kv.split("=") for kv in line.replace("[telemetry] ", "").split())
+                    t = FreeWiliTelemetry(
+                        jumps=int(parts.get("jumps", 0)),
+                        target=int(parts.get("target", 20)),
+                        state=int(parts.get("state", 0)),
+                        g_mg=int(parts.get("g", 1000)),
+                        peak_mg=int(parts.get("peak", 0)),
+                    )
+                    self.latest_telemetry = t
+                    if self.on_telemetry:
+                        self.on_telemetry(t)
+                except Exception:
+                    pass
 
     # -------------------------------------------------------------
     # Command Dispatch (Target Sync & Audio Triggers)

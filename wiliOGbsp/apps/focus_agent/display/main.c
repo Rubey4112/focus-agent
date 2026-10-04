@@ -120,6 +120,59 @@ static inline uint32_t isqrt(uint32_t val) {
     return res;
 }
 
+/* Bespoke High-Contrast Seven-Segment Display Renderer for LCD (320x240)
+ * Renders large digits directly with st7789_fill_rect (w: 28px, h: 48px, thickness: 4px) */
+static void draw_seg7_digit(uint16_t x, uint16_t y, char digit, uint16_t color, uint16_t bg) {
+    /* Segments: a(top), b(top-r), c(bot-r), d(bot), e(bot-l), f(top-l), g(mid) */
+    static const uint8_t s_seg_map[10] = {
+        0x3F, /* 0: a,b,c,d,e,f */
+        0x06, /* 1: b,c */
+        0x5B, /* 2: a,b,d,e,g */
+        0x4F, /* 3: a,b,c,d,g */
+        0x66, /* 4: b,c,f,g */
+        0x6D, /* 5: a,c,d,f,g */
+        0x7D, /* 6: a,c,d,e,f,g */
+        0x07, /* 7: a,b,c */
+        0x7F, /* 8: a,b,c,d,e,f,g */
+        0x6F  /* 9: a,b,c,d,f,g */
+    };
+    uint8_t mask = 0;
+    if (digit >= '0' && digit <= '9') {
+        mask = s_seg_map[digit - '0'];
+    }
+
+    const uint16_t W = 28;
+    const uint16_t H = 48;
+    const uint16_t T = 4;
+    const uint16_t half = H / 2;
+
+    /* Erase entire bounding box first */
+    st7789_fill_rect(x, y, W, H, bg);
+
+    /* Segment a: top */
+    if (mask & 0x01) st7789_fill_rect(x + T, y, W - 2 * T, T, color);
+    /* Segment b: top-right */
+    if (mask & 0x02) st7789_fill_rect(x + W - T, y + T, T, half - T, color);
+    /* Segment c: bot-right */
+    if (mask & 0x04) st7789_fill_rect(x + W - T, y + half, T, half - T, color);
+    /* Segment d: bot */
+    if (mask & 0x08) st7789_fill_rect(x + T, y + H - T, W - 2 * T, T, color);
+    /* Segment e: bot-left */
+    if (mask & 0x10) st7789_fill_rect(x, y + half, T, half - T, color);
+    /* Segment f: top-left */
+    if (mask & 0x20) st7789_fill_rect(x, y + T, T, half - T, color);
+    /* Segment g: mid */
+    if (mask & 0x40) st7789_fill_rect(x + T, y + half - (T / 2), W - 2 * T, T, color);
+}
+
+static void draw_seg7_number(uint16_t x, uint16_t y, unsigned num, uint16_t color, uint16_t bg) {
+    if (num > 99) num = 99;
+    char d0 = (char)('0' + (num / 10));
+    char d1 = (char)('0' + (num % 10));
+    draw_seg7_digit(x, y, d0, color, bg);
+    draw_seg7_digit(x + 34, y, d1, color, bg);
+}
+
 /* Studio-Grade Full-Bleed Tactical Telemetry Canvas (320x240) */
 static void draw_static_ui(void) {
     /* Pure Void Canvas */
@@ -144,6 +197,25 @@ static void draw_static_ui(void) {
     /* Horizontal Hairline above Telemetry Deck (y: 122) */
     st7789_fill_rect(0, 122, ST7789_W, 1, COL_GRID_LINE);
     lcd_text_draw(16, 128, "KINETIC ACCELERATION", 1, COL_MUTED, COL_BG_BLACK);
+
+    /* Telemetry Deck Baselines (y: 122 to 204) */
+    /* 2.0G line */
+    st7789_fill_rect(16, 144, 288, 1, st7789_rgb565(28, 32, 40));
+    lcd_text_draw(306, 140, "2G", 1, COL_MUTED, COL_BG_BLACK);
+
+    /* 1.5G Rep Threshold Line (Dotted Amber appearance) */
+    for (uint16_t dx = 16; dx < 304; dx += 8) {
+        st7789_fill_rect(dx, 160, 4, 1, st7789_rgb565(120, 80, 25));
+    }
+    lcd_text_draw(16, 163, "1.5G REP THRESHOLD", 1, st7789_rgb565(180, 130, 40), COL_BG_BLACK);
+
+    /* 1.0G Rest Gravity Line */
+    st7789_fill_rect(16, 176, 288, 1, COL_GRID_LINE);
+    lcd_text_draw(306, 172, "1G", 1, COL_MUTED, COL_BG_BLACK);
+
+    /* 0.0G Line */
+    st7789_fill_rect(16, 192, 288, 1, st7789_rgb565(20, 22, 28));
+    lcd_text_draw(306, 188, "0G", 1, COL_MUTED, COL_BG_BLACK);
 
     /* Horizontal Hairline above Footer (y: 204) */
     st7789_fill_rect(0, 204, ST7789_W, 1, COL_GRID_LINE);
@@ -363,9 +435,6 @@ int main(void) {
             if ((int32_t)count != last_disp_count || (now_ms < flash_until_ms)) {
                 last_disp_count = (int32_t)count;
 
-                char count_buf[4];
-                snprintf(count_buf, sizeof(count_buf), "%02u", (unsigned)(count > 99 ? 99 : count));
-
                 uint16_t num_col = COL_WHITE;
                 if (now_ms < flash_until_ms) {
                     num_col = COL_CRIMSON;
@@ -373,8 +442,8 @@ int main(void) {
                     num_col = COL_EMERALD;
                 }
 
-                /* Scale 6: 2 digits at x: 16, y: 30 */
-                lcd_text_draw_padded(16, 30, count_buf, 2, 6, num_col, COL_BG_BLACK);
+                /* Draw bespoke Seven-Segment Digits (Scale 6 equivalent: 62x48px at x: 16, y: 32) */
+                draw_seg7_number(16, 32, (unsigned)count, num_col, COL_BG_BLACK);
 
                 /* Unified fraction target */
                 char frac_buf[8];
@@ -429,7 +498,62 @@ int main(void) {
                 }
             }
 
-            /* Live Acceleration Readout in Telemetry Deck (x: 230, y: 128) */
+            /* Live Acceleration Readout & Rolling Waveform Oscilloscope */
+            static uint8_t s_wave_y[16] = {176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176, 176};
+            static uint32_t s_last_wave_ms = 0;
+
+            if (now_ms - s_last_wave_ms >= 50) {
+                s_last_wave_ms = now_ms;
+                /* Shift waveform left */
+                for (int i = 0; i < 15; i++) {
+                    s_wave_y[i] = s_wave_y[i + 1];
+                }
+                /* Map current acceleration (0 - 2500 mg) to y coordinate (192 down to 136) */
+                int mapped_y = 176 - (int)((r_smooth_mg - 1000) * 36 / 1000);
+                if (mapped_y < 136) mapped_y = 136;
+                if (mapped_y > 192) mapped_y = 192;
+                s_wave_y[15] = (uint8_t)mapped_y;
+
+                /* Redraw waveform: erase previous column slices and render 16 sampled points */
+                /* Waveform area: x from 16 to 304, y from 136 to 194 (58px tall) */
+                st7789_fill_rect(16, 136, 288, 62, COL_BG_BLACK);
+
+                /* Restore the subtle datum grid lines */
+                st7789_fill_rect(16, 144, 288, 1, st7789_rgb565(28, 32, 40)); /* 2G */
+                for (uint16_t dx = 16; dx < 304; dx += 8) {
+                    st7789_fill_rect(dx, 160, 4, 1, st7789_rgb565(120, 80, 25)); /* 1.5G */
+                }
+                st7789_fill_rect(16, 176, 288, 1, COL_GRID_LINE); /* 1G */
+                st7789_fill_rect(16, 192, 288, 1, st7789_rgb565(20, 22, 28)); /* 0G */
+
+                /* Plot connected segments across the 16 nodes */
+                for (int i = 0; i < 15; i++) {
+                    uint16_t x0 = 16 + (uint16_t)(i * 19);
+                    uint16_t x1 = 16 + (uint16_t)((i + 1) * 19);
+                    uint16_t y0 = s_wave_y[i];
+                    uint16_t y1 = s_wave_y[i + 1];
+
+                    /* Fast Bresenham line segment */
+                    int dx = abs((int)x1 - (int)x0), sx = x0 < x1 ? 1 : -1;
+                    int dy = -abs((int)y1 - (int)y0), sy = y0 < y1 ? 1 : -1;
+                    int err = dx + dy, e2;
+                    uint16_t cx = x0, cy = y0;
+                    while (1) {
+                        st7789_fill_rect(cx, cy, 2, 2, COL_WHITE);
+                        if (cx == x1 && cy == y1) break;
+                        e2 = 2 * err;
+                        if (e2 >= dy) { err += dy; cx += sx; }
+                        if (e2 <= dx) { err += dx; cy += sy; }
+                    }
+
+                    /* If peak jump triggered at this segment, draw Signal Crimson indicator box */
+                    if (y0 <= 150) {
+                        st7789_fill_rect(x0 - 2, y0 - 2, 5, 5, COL_CRIMSON);
+                        st7789_fill_rect(x0 - 1, y0 - 1, 3, 3, COL_WHITE);
+                    }
+                }
+            }
+
             if (abs((int)r_smooth_mg - (int)last_disp_r) > 15 || now_ms < flash_until_ms) {
                 last_disp_r = r_smooth_mg;
 

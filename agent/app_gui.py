@@ -741,6 +741,11 @@ class FocusAgentApp:
         self.event_queue.put(("telemetry", t))
 
     def _process_telemetry_ui(self, t: FreeWiliTelemetry):
+        # Extract telemetry parameters safely
+        st_name = getattr(t, "state_name", "IDLE")
+        g_val = getattr(t, "g_mg", 1000) / 1000.0
+        pk_val = getattr(t, "peak_mg", getattr(t, "peak_g_mg", 0)) / 1000.0
+
         # Update connection badge
         if self.freewili.is_connected:
             self.conn_badge.configure(text="● HARDWARE LINKED", bg="#14231A", fg="#34D399")
@@ -758,8 +763,10 @@ class FocusAgentApp:
         target = self.settings.get("target_jumps", 10)
 
         # Update Penalty / Jump counting & Dynamic Progress Bar
-        current_reps = self.jumps_in_penalty if self.penalty_active else t.jumps
         if self.penalty_active:
+            if t.jumps < self.penalty_start_jumps:
+                # Hardware device reset count to 0 upon receiving set_target
+                self.penalty_start_jumps = 0
             self.jumps_in_penalty = max(0, t.jumps - self.penalty_start_jumps)
             current_reps = self.jumps_in_penalty
             self.reps_display.configure(text=f"{self.jumps_in_penalty:02d} / {target:02d}")
@@ -786,6 +793,7 @@ class FocusAgentApp:
                 self.audio.play(SOUND_PENALTY_CLEARED)
                 self.overlay.show_victory_and_dismiss()
         else:
+            current_reps = t.jumps
             self.reps_display.configure(text=f"{t.jumps:02d} / {target:02d}")
 
         # Update Live Dashboard 10-Block Tactile Gauge (matching hardware)
