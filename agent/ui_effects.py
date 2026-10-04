@@ -125,7 +125,66 @@ def create_glass_card_image(
         alpha = int(220 * (1.0 - factor * 0.7))
         draw.point((x, 0), fill=rim_rgb + (alpha,))
 
-    return base
+def create_camera_standby_image(width: int = 440, height: int = 240) -> Image.Image:
+    """Generate an authentic technical HUD instrument frame for the optical sensor."""
+    img = Image.new("RGB", (width, height), (13, 14, 18))
+    draw = ImageDraw.Draw(img)
+
+    # 1. Subtle DIN coordinate grid
+    for x in range(24, width, 48):
+        draw.line([(x, 0), (x, height)], fill=(18, 20, 26), width=1)
+    for y in range(24, height, 48):
+        draw.line([(0, y), (width, y)], fill=(18, 20, 26), width=1)
+
+    # 2. Outer hairline container border
+    draw.rectangle([(0, 0), (width - 1, height - 1)], outline=(32, 35, 45), width=1)
+
+    # 3. Precision FOV Corner Brackets with millimeter tick marks
+    b_len = 24
+    b_col = (113, 113, 122)
+    # TL
+    draw.line([(12, 12), (12 + b_len, 12)], fill=b_col, width=2)
+    draw.line([(12, 12), (12, 12 + b_len)], fill=b_col, width=2)
+    draw.line([(18, 12), (18, 16)], fill=b_col, width=1)
+    # TR
+    draw.line([(width - 12, 12), (width - 12 - b_len, 12)], fill=b_col, width=2)
+    draw.line([(width - 12, 12), (width - 12, 12 + b_len)], fill=b_col, width=2)
+    draw.line([(width - 18, 12), (width - 18, 16)], fill=b_col, width=1)
+    # BL
+    draw.line([(12, height - 12), (12 + b_len, height - 12)], fill=b_col, width=2)
+    draw.line([(12, height - 12), (12, height - 12 - b_len)], fill=b_col, width=2)
+    draw.line([(18, height - 12), (18, height - 16)], fill=b_col, width=1)
+    # BR
+    draw.line([(width - 12, height - 12), (width - 12 - b_len, height - 12)], fill=b_col, width=2)
+    draw.line([(width - 12, height - 12), (width - 12, height - 12 - b_len)], fill=b_col, width=2)
+    draw.line([(width - 18, height - 12), (width - 18, height - 16)], fill=b_col, width=1)
+
+    # 4. Central Precision Optical Target Box
+    cx, cy = width // 2, height // 2
+    box_w, box_h = 130, 100
+    draw.rectangle(
+        [(cx - box_w // 2, cy - box_h // 2), (cx + box_w // 2, cy + box_h // 2)],
+        outline=(39, 43, 56), width=1
+    )
+    # Center reticle pip
+    draw.line([(cx - 10, cy), (cx + 10, cy)], fill=(82, 82, 91), width=1)
+    draw.line([(cx, cy - 10), (cx, cy + 10)], fill=(82, 82, 91), width=1)
+
+    # 5. Technical Readout Tags
+    try:
+        from PIL import ImageFont
+        font_sm = ImageFont.truetype("consolab.ttf", 9)
+        font_xs = ImageFont.truetype("consolab.ttf", 8)
+    except Exception:
+        font_sm = font_xs = None
+
+    draw.text((20, 18), "OPTICAL SENSOR : STANDBY", fill=(161, 161, 170), font=font_sm)
+    draw.text((width - 110, 18), "DEV 0 · 640x480", fill=(113, 113, 122), font=font_xs)
+    draw.text((cx - 60, cy + 58), "AWAITING SENTINEL ENGAGEMENT", fill=(113, 113, 122), font=font_xs)
+    draw.text((20, height - 26), "FOV: 78° DIAGONAL", fill=(82, 82, 91), font=font_xs)
+    draw.text((width - 96, height - 26), "MODEL: YUNET", fill=(82, 82, 91), font=font_xs)
+
+    return img
 
 
 class GradientButton(tk.Label):
@@ -143,11 +202,13 @@ class GradientButton(tk.Label):
         hover_color1: str = "#2A2F3D",
         hover_color2: str = "#1E222C",
         fg: str = "#EDEDF2",
+        bg: Optional[str] = None,
         font=("Segoe UI", 10, "bold"),
         corner_radius: int = 6,
         **kwargs
     ):
-        super().__init__(parent, text=text, font=font, fg=fg, cursor="hand2", **kwargs)
+        parent_bg = bg or (parent.cget("bg") if hasattr(parent, "cget") else "#15171E")
+        super().__init__(parent, text=text, font=font, fg=fg, bg=parent_bg, cursor="hand2", **kwargs)
         self.command = command
         self.width_px = width_px
         self.height_px = height_px
@@ -156,6 +217,7 @@ class GradientButton(tk.Label):
         self.hover_color1 = hover_color1
         self.hover_color2 = hover_color2
         self.corner_radius = corner_radius
+        self.parent_bg = parent_bg
 
         # Pre-render state textures
         self._img_normal = ImageTk.PhotoImage(
@@ -167,7 +229,7 @@ class GradientButton(tk.Label):
             )
         )
 
-        self.configure(image=self._img_normal, compound="center", bd=0)
+        self.configure(image=self._img_normal, compound="center", bd=0, highlightthickness=0)
         self.bind("<Enter>", self._on_enter)
         self.bind("<Leave>", self._on_leave)
         self.bind("<Button-1>", self._on_click)

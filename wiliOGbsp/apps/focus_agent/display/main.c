@@ -37,15 +37,19 @@ static void play_alert_sound(uint8_t sound_id) {
     }
 }
 
-/* ---- Minimalist House Arrest Tether Palette (RGB565) ---- */
-#define COL_BG_BLACK    st7789_rgb565(8, 8, 10)         /* Pure Void Charcoal */
-#define COL_PANEL       st7789_rgb565(16, 18, 22)       /* Frosted Charcoal Card */
-#define COL_BORDER      st7789_rgb565(36, 40, 48)       /* Subtle Frosted Zinc Border */
-#define COL_TRACK       st7789_rgb565(24, 26, 32)       /* Solid Dark Track */
-#define COL_WHITE       0xFFFFu                         /* Crisp Stark White */
-#define COL_MUTED       st7789_rgb565(120, 125, 138)    /* Tactical Silver */
-#define COL_CRIMSON     st7789_rgb565(250, 45, 60)      /* Enforcement Alert Crimson */
-#define COL_EMERALD     st7789_rgb565(16, 185, 129)     /* Restored Emerald */
+/* ---- Studio-Grade Tactical Tether Palette (RGB565) ---- */
+#define COL_BG_BLACK    st7789_rgb565(10, 11, 14)       /* Pure Void Slate */
+#define COL_GRID_LINE   st7789_rgb565(32, 35, 45)       /* 1px Architectural Hairline */
+#define COL_BLOCK_BG    st7789_rgb565(20, 22, 28)       /* Unfilled Gauge Track */
+#define COL_WHITE       0xFFFFu                         /* Monolithic White */
+#define COL_DIM_WHITE   st7789_rgb565(140, 145, 160)    /* Zinc Silver */
+#define COL_MUTED       st7789_rgb565(90, 95, 110)      /* Technical Caption */
+#define COL_CRIMSON     st7789_rgb565(245, 50, 65)      /* Enforcement Alert Crimson */
+#define COL_AMBER       st7789_rgb565(250, 175, 40)     /* Kinetic Amber */
+#define COL_EMERALD     st7789_rgb565(34, 197, 94)      /* Verified Emerald */
+
+/* Number of chunky progress gauge blocks */
+#define JJ_GAUGE_BLOCKS 10u
 
 /* ---- Jumping Jack Detection Engine ---- */
 typedef enum {
@@ -116,30 +120,36 @@ static inline uint32_t isqrt(uint32_t val) {
     return res;
 }
 
-/* Minimalist House Arrest Tether UI drawn once at boot */
+/* Studio-Grade Full-Bleed Tactical Telemetry Canvas (320x240) */
 static void draw_static_ui(void) {
-    /* Pure Void Charcoal Canvas */
+    /* Pure Void Canvas */
     st7789_fill_rect(0, 0, ST7789_W, ST7789_H, COL_BG_BLACK);
     st7789_dma_wait();
 
-    /* Header Bar (y: 0 to 28) */
-    st7789_fill_rect(0, 0, ST7789_W, 28, COL_BG_BLACK);
-    st7789_fill_rect(0, 28, ST7789_W, 1, COL_BORDER);
-    lcd_text_draw(12, 10, "FOCUS AGENT // TETHER", 1, COL_WHITE, COL_BG_BLACK);
-    lcd_text_draw(228, 10, "[LOCKED]", 1, COL_CRIMSON, COL_BG_BLACK);
+    /* Header Section (y: 0 to 24) */
+    st7789_fill_rect(0, 24, ST7789_W, 1, COL_GRID_LINE);
+    lcd_text_draw(16, 7, "FOCUS AGENT : TETHER", 1, COL_DIM_WHITE, COL_BG_BLACK);
 
-    /* Centerpiece Discipline Card (y: 34 to 176, w: 304, h: 142) */
-    st7789_fill_rect(8, 34, 304, 142, COL_PANEL);
-    st7789_fill_rect(8, 34, 304, 1, COL_BORDER);
-    st7789_fill_rect(8, 175, 304, 1, COL_BORDER);
-    st7789_fill_rect(8, 34, 1, 142, COL_BORDER);
-    st7789_fill_rect(311, 34, 1, 142, COL_BORDER);
+    /* Solid Crimson Lockout Pill (x: 236 to 304, y: 5 to 19) */
+    st7789_fill_rect(236, 5, 68, 14, COL_CRIMSON);
+    lcd_text_draw(248, 8, "LOCKED", 1, COL_WHITE, COL_CRIMSON);
 
-    lcd_text_draw(84, 44, "JUMPING JACK COUNT", 1, COL_MUTED, COL_PANEL);
+    /* Main Area Divider (x: 188, y: 30 to 86) */
+    st7789_fill_rect(188, 30, 1, 56, COL_GRID_LINE);
 
-    /* Bottom Restraint Status Frame (y: 184 to 238) */
-    st7789_fill_rect(0, 184, ST7789_W, 1, COL_BORDER);
-    lcd_text_draw(12, 222, "TETHER STATUS: TAMPER CONTROLS LOCKED", 1, COL_MUTED, COL_BG_BLACK);
+    /* Right Secondary Labels */
+    lcd_text_draw(200, 34, "ACTIVE CADENCE", 1, COL_MUTED, COL_BG_BLACK);
+    lcd_text_draw(200, 66, "SESSION TIME", 1, COL_MUTED, COL_BG_BLACK);
+
+    /* Horizontal Hairline above Telemetry Deck (y: 122) */
+    st7789_fill_rect(0, 122, ST7789_W, 1, COL_GRID_LINE);
+    lcd_text_draw(16, 128, "KINETIC ACCELERATION", 1, COL_MUTED, COL_BG_BLACK);
+
+    /* Horizontal Hairline above Footer (y: 204) */
+    st7789_fill_rect(0, 204, ST7789_W, 1, COL_GRID_LINE);
+    lcd_text_draw(16, 216, "BATT 88%", 1, COL_DIM_WHITE, COL_BG_BLACK);
+    lcd_text_draw(118, 216, "BLE CONNECTED", 1, COL_DIM_WHITE, COL_BG_BLACK);
+    lcd_text_draw(230, 216, "SESSION ACTIVE", 1, COL_MUTED, COL_BG_BLACK);
 }
 
 int main(void) {
@@ -349,12 +359,12 @@ int main(void) {
         if (st7789_ready() && time_reached(next_ui_update)) {
             next_ui_update = make_timeout_time_ms(33);
 
-            /* Giant Centerpiece Rep Counter (Scale 6) */
+            /* Monolithic Hero Rep Counter & Fraction in Left Zone */
             if ((int32_t)count != last_disp_count || (now_ms < flash_until_ms)) {
                 last_disp_count = (int32_t)count;
 
-                char count_buf[8];
-                snprintf(count_buf, sizeof(count_buf), "%4u", (unsigned)count);
+                char count_buf[4];
+                snprintf(count_buf, sizeof(count_buf), "%02u", (unsigned)(count > 99 ? 99 : count));
 
                 uint16_t num_col = COL_WHITE;
                 if (now_ms < flash_until_ms) {
@@ -363,67 +373,71 @@ int main(void) {
                     num_col = COL_EMERALD;
                 }
 
-                /* Scale 6: 4 chars * 36px = 144px width. Centered at x = 88, y = 60. Height = 48px */
-                lcd_text_draw_padded(88, 60, count_buf, 4, 6, num_col, COL_PANEL);
+                /* Scale 6: 2 digits at x: 16, y: 30 */
+                lcd_text_draw_padded(16, 30, count_buf, 2, 6, num_col, COL_BG_BLACK);
 
-                /* Target Reps Requirement below giant number */
-                char tgt_buf[32];
-                if (count >= target) {
-                    snprintf(tgt_buf, sizeof(tgt_buf), "GOAL SECURED: %u / %u REPS", (unsigned)count, (unsigned)target);
-                    lcd_text_draw_padded(64, 116, tgt_buf, 26, 1, COL_EMERALD, COL_PANEL);
-                } else {
-                    snprintf(tgt_buf, sizeof(tgt_buf), "REQUIRED: %u REPETITIONS", (unsigned)target);
-                    lcd_text_draw_padded(82, 116, tgt_buf, 24, 1, COL_MUTED, COL_PANEL);
-                }
+                /* Unified fraction target */
+                char frac_buf[8];
+                snprintf(frac_buf, sizeof(frac_buf), "/ %02u", (unsigned)(target > 99 ? 99 : target));
+                lcd_text_draw(80, 36, frac_buf, 3, COL_DIM_WHITE, COL_BG_BLACK);
+                lcd_text_draw(80, 64, "REPS COMPLETED", 1, COL_MUTED, COL_BG_BLACK);
             }
 
-            /* Minimalist High-Contrast Progress Bar (width: 272 px) */
-            uint32_t prog_w = (target > 0) ? ((count > target ? target : count) * 272 / target) : 0;
-            if (prog_w != last_disp_prog_w) {
-                last_disp_prog_w = prog_w;
-                uint16_t fill_col = (count >= target) ? COL_EMERALD : COL_WHITE;
-                if (prog_w > 0) {
-                    st7789_fill_rect(24, 134, (uint16_t)prog_w, 8, fill_col);
-                }
-                if (prog_w < 272) {
-                    st7789_fill_rect(24 + (uint16_t)prog_w, 134, (uint16_t)(272 - prog_w), 8, COL_TRACK);
-                }
-                st7789_fill_rect(24, 133, 272, 1, COL_BORDER);
-            }
-
-            /* Jump State & Kinetic Motion Indicator inside centerpiece card */
-            if ((int32_t)state != last_disp_state) {
+            /* Right Zone: Kinetic Cadence & Session Time */
+            if ((int32_t)state != last_disp_state || (now_ms < flash_until_ms)) {
                 last_disp_state = (int32_t)state;
-                const char *state_names[] = {
-                    "STANDBY",
-                    "DIP",
-                    "THRUST",
+                const char *state_tags[] = {
+                    "STANDBY ",
+                    "CROUCH  ",
+                    "PROPEL  ",
                     "AIRBORNE",
-                    "JUMP +1"
+                    "LANDED  "
                 };
-                char st_buf[32];
+                uint16_t tag_col = COL_MUTED;
                 if (count >= target) {
-                    snprintf(st_buf, sizeof(st_buf), "STATUS: [ ACCESS RESTORED ]");
-                    lcd_text_draw_padded(64, 152, st_buf, 26, 1, COL_EMERALD, COL_PANEL);
+                    tag_col = COL_EMERALD;
+                    lcd_text_draw_padded(200, 46, "GOAL MET", 8, 2, tag_col, COL_BG_BLACK);
                 } else {
-                    snprintf(st_buf, sizeof(st_buf), "MOTION: [ %-12s ]", state_names[state]);
-                    lcd_text_draw_padded(76, 152, st_buf, 24, 1, (state == JJ_STATE_LANDED ? COL_WHITE : COL_MUTED), COL_PANEL);
+                    if (state == JJ_STATE_LANDED || now_ms < flash_until_ms) {
+                        tag_col = COL_AMBER;
+                    } else if (state == JJ_STATE_FLIGHT) {
+                        tag_col = COL_WHITE;
+                    }
+                    lcd_text_draw_padded(200, 46, state_tags[state], 8, 2, tag_col, COL_BG_BLACK);
                 }
             }
 
-            /* Lower Frame: Real-Time Acceleration Metrics */
-            if (abs((int)r_smooth_mg - (int)last_disp_r) > 20 || now_ms < flash_until_ms) {
+            /* 10-Block Segmented Tactile Progress Bar (x: 16 to 304, y: 98 to 112) */
+            uint32_t completed_blocks = (target > 0) ? ((count > target ? target : count) * JJ_GAUGE_BLOCKS / target) : 0;
+            if (completed_blocks != last_disp_prog_w) {
+                last_disp_prog_w = completed_blocks;
+                
+                /* 10 blocks: each block is 26px wide, 14px high, with 3px gap. Total = 287px */
+                const uint16_t start_x = 16;
+                const uint16_t block_w = 26;
+                const uint16_t block_h = 14;
+                const uint16_t gap = 3;
+                const uint16_t block_y = 98;
+
+                for (unsigned b = 0; b < JJ_GAUGE_BLOCKS; b++) {
+                    const uint16_t bx = start_x + (b * (block_w + gap));
+                    uint16_t fill_c = COL_BLOCK_BG;
+                    if (b < completed_blocks) {
+                        fill_c = (count >= target) ? COL_EMERALD : COL_WHITE;
+                    }
+                    st7789_fill_rect(bx, block_y, block_w, block_h, fill_c);
+                }
+            }
+
+            /* Live Acceleration Readout in Telemetry Deck (x: 230, y: 128) */
+            if (abs((int)r_smooth_mg - (int)last_disp_r) > 15 || now_ms < flash_until_ms) {
                 last_disp_r = r_smooth_mg;
 
-                char g_buf[40];
-                const unsigned g_int = r_smooth_mg / 1000;
-                const unsigned g_dec = (r_smooth_mg % 1000) / 10;
+                char g_buf[32];
                 const unsigned p_int = last_jump_peak_mg / 1000;
                 const unsigned p_dec = (last_jump_peak_mg % 1000) / 10;
-
-                snprintf(g_buf, sizeof(g_buf), "G-FORCE: %u.%02ug  |  PEAK: %u.%02ug",
-                         g_int, g_dec, p_int, p_dec);
-                lcd_text_draw_padded(36, 196, g_buf, 32, 1, COL_MUTED, COL_BG_BLACK);
+                snprintf(g_buf, sizeof(g_buf), "PEAK: +%u.%02u G", p_int, p_dec);
+                lcd_text_draw_padded(220, 128, g_buf, 14, 1, COL_DIM_WHITE, COL_BG_BLACK);
             }
         }
 

@@ -39,16 +39,35 @@ from freewili_client import FreeWiliClient, FreeWiliTelemetry
 from doomscroll_detector import DoomscrollDetector
 from audio_manager import AudioManager, SOUND_SWIVEL_NECK, SOUND_PENALTY_CLEARED
 from overlay import PenaltyOverlay
-from ui_effects import GradientButton, create_horizontal_gradient_image, create_vertical_gradient_image
+from ui_effects import GradientButton, create_horizontal_gradient_image, create_vertical_gradient_image, create_camera_standby_image
 
 
 class ScrollableFrame(tk.Frame):
-    """Frosted Charcoal Scrollable Container with automatic mousewheel support."""
+    """Frosted Charcoal Scrollable Container with custom styled dark scrollbar and mousewheel support."""
 
     def __init__(self, container, bg="#0D0E12", *args, **kwargs):
         super().__init__(container, bg=bg, *args, **kwargs)
         self.canvas = tk.Canvas(self, bg=bg, bd=0, highlightthickness=0)
-        self.scrollbar = ttk.Scrollbar(self, orient="vertical", command=self.canvas.yview)
+        
+        # Configure sleek dark scrollbar
+        style = ttk.Style()
+        style.theme_use("clam")
+        style.configure(
+            "Dark.Vertical.TScrollbar",
+            gripcount=0,
+            background="#252834",
+            darkcolor="#15171E",
+            lightcolor="#15171E",
+            troughcolor="#0D0E12",
+            bordercolor="#0D0E12",
+            arrowcolor="#8E94A5"
+        )
+        style.map(
+            "Dark.Vertical.TScrollbar",
+            background=[("active", "#3A3F52"), ("pressed", "#1E202A")]
+        )
+
+        self.scrollbar = ttk.Scrollbar(self, orient="vertical", style="Dark.Vertical.TScrollbar", command=self.canvas.yview)
         self.scrollable_window = tk.Frame(self.canvas, bg=bg)
 
         self.scrollable_window.bind(
@@ -58,16 +77,28 @@ class ScrollableFrame(tk.Frame):
 
         self._window_id = self.canvas.create_window((0, 0), window=self.scrollable_window, anchor="nw")
 
-        self.canvas.bind("<Configure>", self._on_canvas_configure)
-        self.canvas.configure(yscrollcommand=self.scrollbar.set)
-
         self.canvas.pack(side="left", fill="both", expand=True)
-        self.scrollbar.pack(side="right", fill="y")
+        # Scrollbar will be dynamically managed when content exceeds canvas height
+        self._scrollbar_visible = False
 
         self.bind_all("<MouseWheel>", self._on_mousewheel)
 
+    def _update_scrollbar_visibility(self):
+        self.update_idletasks()
+        content_height = self.scrollable_window.winfo_reqheight()
+        canvas_height = self.canvas.winfo_height()
+        if content_height > canvas_height and canvas_height > 10:
+            if not self._scrollbar_visible:
+                self.scrollbar.pack(side="right", fill="y")
+                self._scrollbar_visible = True
+        else:
+            if self._scrollbar_visible:
+                self.scrollbar.pack_forget()
+                self._scrollbar_visible = False
+
     def _on_canvas_configure(self, event):
         self.canvas.itemconfig(self._window_id, width=event.width)
+        self._update_scrollbar_visibility()
 
     def _on_mousewheel(self, event):
         if self.winfo_exists() and self.canvas.winfo_exists():
@@ -80,8 +111,8 @@ class FocusAgentApp:
     def __init__(self, root: tk.Tk):
         self.root = root
         self.root.title("Focus Agent - Discipline Sentinel")
-        self.root.geometry("740x880")
-        self.root.minsize(680, 720)
+        self.root.geometry("740x790")
+        self.root.minsize(700, 750)
         self.root.configure(bg="#0D0E12")
 
         # Load saved settings
@@ -138,11 +169,22 @@ class FocusAgentApp:
         style.theme_use("clam")
 
         style.configure("TNotebook", background="#0D0E12", borderwidth=0)
-        style.configure("TNotebook.Tab", background="#15171E", foreground="#8E94A5",
-                        font=("Segoe UI", 10, "bold"), padding=[20, 8])
-        style.map("TNotebook.Tab",
-                  background=[("selected", "#222530")],
-                  foreground=[("selected", "#EDEDF0")])
+        style.configure(
+            "TNotebook.Tab",
+            background="#14161F",
+            foreground="#71717A",
+            lightcolor="#222532",
+            bordercolor="#222532",
+            darkcolor="#14161F",
+            padding=[20, 8],
+            font=("Segoe UI", 9, "bold")
+        )
+        style.map(
+            "TNotebook.Tab",
+            background=[("selected", "#1C1F2A")],
+            foreground=[("selected", "#EDEDF0")],
+            bordercolor=[("selected", "#2E3244")]
+        )
 
         style.configure("TFrame", background="#0D0E12")
         style.configure("Card.TFrame", background="#15171E", relief="solid", borderwidth=1)
@@ -158,44 +200,108 @@ class FocusAgentApp:
                   background=[("active", "#2A2F3D"), ("pressed", "#14161E")])
 
     def _build_tabs(self):
-        # Frosted Charcoal Header Canvas
-        hdr_canvas = tk.Canvas(self.root, height=64, bg="#0D0E12", bd=0, highlightthickness=0)
-        hdr_canvas.pack(fill="x", side="top")
+        # High-precision architectural header with 1px zinc bottom hairline
+        hdr_frame = tk.Frame(self.root, height=56, bg="#0D0E12")
+        hdr_frame.pack(fill="x", side="top")
+        hdr_frame.pack_propagate(False)
 
-        # Frosted glass background & bottom highlight stroke
-        self._hdr_bg_img = ImageTk.PhotoImage(
-            create_horizontal_gradient_image(780, 64, "#0D0E12", "#161820", "#181A22")
-        )
-        self._hdr_line_img = ImageTk.PhotoImage(
-            create_horizontal_gradient_image(780, 1, "#282B35", "#3A3F4E", "#282B35")
-        )
-        hdr_canvas.create_image(0, 0, image=self._hdr_bg_img, anchor="nw")
-        hdr_canvas.create_image(0, 63, image=self._hdr_line_img, anchor="nw")
+        # Wordmark + discipline badge in single structured flex container
+        wordmark_box = tk.Frame(hdr_frame, bg="#0D0E12")
+        wordmark_box.pack(side="left", padx=24, pady=12)
 
         title_lbl = tk.Label(
-            hdr_canvas, text="FOCUS AGENT", font=("Segoe UI", 17, "bold"),
-            fg="#EDEDF0", bg="#161820"
+            wordmark_box, text="FOCUS AGENT", font=("Segoe UI", 15, "bold"),
+            fg="#EDEDF0", bg="#0D0E12"
         )
-        title_lbl.place(x=20, y=16)
+        title_lbl.pack(side="left")
+
+        # Architectural hair divider
+        tk.Label(
+            wordmark_box, text="—", font=("Segoe UI", 12),
+            fg="#3F4250", bg="#0D0E12", padx=12
+        ).pack(side="left")
 
         sub_lbl = tk.Label(
-            hdr_canvas, text="// DISCIPLINE SENTINEL", font=("Segoe UI", 9, "bold"),
-            fg="#71717A", bg="#161820"
+            wordmark_box, text="DISCIPLINE SENTINEL", font=("Segoe UI", 9, "bold"),
+            fg="#71717A", bg="#0D0E12"
         )
-        sub_lbl.place(x=160, y=22)
+        sub_lbl.pack(side="left")
 
-        # Tab notebook
-        notebook = ttk.Notebook(self.root)
-        notebook.pack(expand=True, fill="both", padx=12, pady=10)
+        # Hardware connection status pill on header right
+        self.conn_badge = tk.Label(
+            hdr_frame, text="● BLE SCANNING", font=("Segoe UI", 9, "bold"),
+            bg="#181A22", fg="#A1A1AA", padx=12, pady=4
+        )
+        self.conn_badge.pack(side="right", padx=24, pady=14)
 
-        self.tab_dash = ttk.Frame(notebook)
-        self.tab_settings = ttk.Frame(notebook)
+        # 1px border stroke below header
+        hdr_stroke = tk.Frame(self.root, height=1, bg="#20222B")
+        hdr_stroke.pack(fill="x", side="top")
 
-        notebook.add(self.tab_dash, text="  Dashboard  ")
-        notebook.add(self.tab_settings, text="  Settings  ")
+        # Studio Pill Tab Switcher Row (Zero Tkinter wireframe borders)
+        nav_row = tk.Frame(self.root, bg="#0D0E12", padx=20, pady=10)
+        nav_row.pack(fill="x", side="top")
+
+        self._active_tab = "dash"
+        self._pill_dash = tk.Button(
+            nav_row,
+            text="DASHBOARD",
+            font=("Segoe UI", 9, "bold"),
+            bg="#222634",
+            fg="#EDEDF0",
+            activebackground="#2B3042",
+            activeforeground="#FFFFFF",
+            bd=0,
+            highlightthickness=0,
+            padx=16,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self._switch_view("dash")
+        )
+        self._pill_dash.pack(side="left", padx=(0, 8))
+
+        self._pill_settings = tk.Button(
+            nav_row,
+            text="SETTINGS",
+            font=("Segoe UI", 9, "bold"),
+            bg="#14161F",
+            fg="#71717A",
+            activebackground="#222634",
+            activeforeground="#EDEDF0",
+            bd=0,
+            highlightthickness=0,
+            padx=16,
+            pady=6,
+            cursor="hand2",
+            command=lambda: self._switch_view("settings")
+        )
+        self._pill_settings.pack(side="left")
+
+        # Main Content Containers
+        self.container_frame = tk.Frame(self.root, bg="#0D0E12")
+        self.container_frame.pack(expand=True, fill="both", padx=16, pady=(0, 10))
+
+        self.tab_dash = tk.Frame(self.container_frame, bg="#0D0E12")
+        self.tab_settings = tk.Frame(self.container_frame, bg="#0D0E12")
+
+        self.tab_dash.pack(expand=True, fill="both")
 
         self._build_dashboard_tab()
         self._build_settings_tab()
+
+    def _switch_view(self, view_name: str):
+        if view_name == "dash":
+            self.tab_settings.pack_forget()
+            self.tab_dash.pack(expand=True, fill="both")
+            self._pill_dash.configure(bg="#222634", fg="#EDEDF0")
+            self._pill_settings.configure(bg="#14161F", fg="#71717A")
+            self._active_tab = "dash"
+        else:
+            self.tab_dash.pack_forget()
+            self.tab_settings.pack(expand=True, fill="both")
+            self._pill_dash.configure(bg="#14161F", fg="#71717A")
+            self._pill_settings.configure(bg="#222634", fg="#EDEDF0")
+            self._active_tab = "settings"
 
     # -------------------------------------------------------------
     # Dashboard Tab (Scrollable)
@@ -205,187 +311,230 @@ class FocusAgentApp:
         self.dash_scroll.pack(fill="both", expand=True)
         content = self.dash_scroll.scrollable_window
 
-        # Master Control Card (Frosted Charcoal)
-        ctrl_card = tk.LabelFrame(content, text=" Sentinel Control ", font=("Segoe UI", 10, "bold"),
-                                  bg="#15171E", fg="#EDEDF0", bd=1, relief="solid", padx=15, pady=12)
-        ctrl_card.pack(fill="x", padx=10, pady=(8, 6))
+        # Section 1: Sentinel Status & Action Panel (Flat dark surface, 1px perimeter border)
+        ctrl_card = tk.Frame(content, bg="#13151C", bd=1, relief="solid", highlightthickness=1, highlightbackground="#222530")
+        ctrl_card.pack(fill="x", padx=16, pady=(10, 8))
 
+        # Status HUD Strip
         self.status_banner = tk.Label(
             ctrl_card,
-            text="SENTINEL READY // CLICK 'START SENTINEL' TO ACTIVATE",
-            font=("Segoe UI", 10, "bold"),
-            bg="#181A22",
+            text="SENTINEL STANDBY · POSTURE ENGINE ARMED",
+            font=("Segoe UI", 8, "bold"),
+            bg="#181A24",
             fg="#A1A1AA",
-            pady=8
+            pady=8,
+            padx=16,
+            anchor="w"
         )
-        self.status_banner.pack(fill="x", pady=(0, 10))
+        self.status_banner.pack(fill="x")
 
-        btn_box = tk.Frame(ctrl_card, bg="#15171E")
-        btn_box.pack(fill="x")
+        # Control Row inside Action Panel
+        action_row = tk.Frame(ctrl_card, bg="#13151C", padx=16, pady=12)
+        action_row.pack(fill="x")
 
+        # High-Precision Tactical Primary CTA (Technical bone-slate outline fill, balanced weight)
         self.start_btn = GradientButton(
-            btn_box,
+            action_row,
             text="▶   START SENTINEL",
             command=self.toggle_sentinel,
-            width_px=220,
-            height_px=42,
-            color1="#1E222C",
-            color2="#14161E",
-            hover_color1="#2B303E",
-            hover_color2="#1E222C",
+            width_px=180,
+            height_px=36,
+            color1="#242838",
+            color2="#181B26",
+            hover_color1="#32374E",
+            hover_color2="#222636",
             fg="#EDEDF0",
-            corner_radius=6
+            bg="#13151C",
+            corner_radius=2
         )
-        self.start_btn.pack(side="left", expand=True, fill="x", padx=(0, 8))
+        self.start_btn.pack(side="left", padx=(0, 10))
 
         min_btn = tk.Button(
-            btn_box,
-            text="🗕   Minimize to Background",
-            font=("Segoe UI", 10, "bold"),
-            bg="#1C1E26",
-            fg="#EDEDF0",
-            activebackground="#262934",
+            action_row,
+            text="MINIMIZE TO TRAY",
+            font=("Segoe UI", 8, "bold"),
+            bg="#161822",
+            fg="#A1A1AA",
+            activebackground="#222534",
             activeforeground="#FFFFFF",
             bd=1,
             relief="solid",
-            padx=14,
-            pady=9,
+            highlightthickness=1,
+            highlightbackground="#2A2D3A",
+            padx=12,
+            pady=6,
             command=self.minimize_to_background,
             cursor="hand2"
         )
-        min_btn.pack(side="right", padx=(8, 0))
+        min_btn.pack(side="left")
 
-        # Checkbox: Camera window preview
+        # Section 2: Camera Feed Container
+        self.cam_card = tk.Frame(content, bg="#13151C", bd=1, relief="solid", highlightthickness=1, highlightbackground="#222530")
+        self.cam_card.pack(fill="x", padx=16, pady=(0, 8))
+
+        cam_header = tk.Frame(self.cam_card, bg="#13151C", padx=16, pady=8)
+        cam_header.pack(fill="x")
+
+        tk.Label(
+            cam_header, text="OPTICAL TELEMETRY", font=("Segoe UI", 8, "bold"),
+            bg="#13151C", fg="#A1A1AA"
+        ).pack(side="left")
+
+        # HUD Preview checkbutton relocated to Viewport Card Header
         cam_chk = tk.Checkbutton(
-            ctrl_card,
-            text="Show Embedded Webcam HUD Preview",
+            cam_header,
+            text="LIVE VIEWPORT",
             variable=self.show_cam_preview,
             command=self._on_cam_preview_toggle,
-            font=("Segoe UI", 10),
-            bg="#15171E",
+            font=("Segoe UI", 8, "bold"),
+            bg="#13151C",
             fg="#A1A1AA",
             selectcolor="#0D0E12",
-            activebackground="#15171E",
-            activeforeground="#EDEDF0"
+            activebackground="#13151C",
+            activeforeground="#EDEDF0",
+            bd=0,
+            highlightthickness=0
         )
-        cam_chk.pack(anchor="w", pady=(8, 0))
-
-        # Camera Preview Frame (Embedded directly in GUI)
-        self.cam_card = tk.LabelFrame(content, text=" Live Camera Posture Feed ",
-                                      font=("Segoe UI", 10, "bold"),
-                                      bg="#15171E", fg="#EDEDF0", bd=1, relief="solid", padx=10, pady=8)
-        self.cam_card.pack(fill="x", padx=10, pady=(0, 6))
-
-        self.cam_container = tk.Frame(self.cam_card, bg="#0D0E12", width=480, height=360)
-        self.cam_container.pack(pady=4)
-        self.cam_container.pack_propagate(False)
-
-        self.cam_preview_label = tk.Label(
-            self.cam_container,
-            text="\n\nWebcam feed will appear here when Sentinel is started.\n(Live face & posture tracking)",
-            font=("Segoe UI", 10),
-            bg="#0D0E12",
-            fg="#71717A",
-        )
-        self.cam_preview_label.pack(expand=True, fill="both")
+        cam_chk.pack(side="right", padx=(10, 0))
 
         calib_btn = tk.Button(
-            self.cam_card,
-            text="🎯  Recalibrate Upright Baseline Posture",
-            font=("Segoe UI", 9, "bold"),
-            bg="#1C1E26",
-            fg="#EDEDF0",
-            activebackground="#262934",
+            cam_header,
+            text="RECALIBRATE BASELINE",
+            font=("Segoe UI", 8, "bold"),
+            bg="#161822",
+            fg="#A1A1AA",
+            activebackground="#242838",
             activeforeground="#FFFFFF",
             bd=1,
             relief="solid",
+            highlightthickness=1,
+            highlightbackground="#2A2D3A",
+            padx=10,
             pady=3,
             command=self.recalibrate_baseline,
             cursor="hand2"
         )
-        calib_btn.pack(pady=(2, 4))
+        calib_btn.pack(side="right")
 
-        # Live Telemetry Card
-        telem_card = tk.LabelFrame(content, text=" FreeWili Live Telemetry & Discipline ",
-                                   font=("Segoe UI", 10, "bold"),
-                                   bg="#15171E", fg="#EDEDF0", bd=1, relief="solid", padx=15, pady=10)
-        telem_card.pack(fill="both", expand=True, padx=10, pady=(0, 6))
+        self.cam_container = tk.Frame(self.cam_card, bg="#0D0E12", width=460, height=230)
+        self.cam_container.pack(pady=(0, 10), padx=16)
+        self.cam_container.pack_propagate(False)
 
-        # Connection Row
-        conn_row = tk.Frame(telem_card, bg="#15171E")
-        conn_row.pack(fill="x", pady=2)
-
-        tk.Label(conn_row, text="Hardware Link:", font=("Segoe UI", 10, "bold"),
-                 bg="#15171E", fg="#71717A").pack(side="left")
-
-        self.conn_badge = tk.Label(conn_row, text="INITIALIZING...", font=("Segoe UI", 9, "bold"),
-                                   bg="#20222B", fg="#EDEDF0", padx=8, pady=2)
-        self.conn_badge.pack(side="left", padx=10)
-
-        # Reps Big Display
-        reps_box = tk.Frame(telem_card, bg="#15171E")
-        reps_box.pack(fill="x", pady=2)
-
-        self.reps_display = tk.Label(
-            reps_box,
-            text=f"REPS: 0 / {self.settings.get('target_jumps', 10)}",
-            font=("Segoe UI", 24, "bold"),
-            fg="#EDEDF0",
-            bg="#15171E"
-        )
-        self.reps_display.pack(anchor="center")
-
-        # Rep Progress Bar (Canvas)
-        self.dash_prog_canvas = tk.Canvas(
-            telem_card,
-            height=12,
+        # Pre-render high-tech radar reticle standby graphic
+        self._cam_standby_photo = ImageTk.PhotoImage(create_camera_standby_image(460, 230))
+        self.cam_preview_label = tk.Label(
+            self.cam_container,
+            image=self._cam_standby_photo,
             bg="#0D0E12",
             bd=0,
-            highlightthickness=1,
-            highlightbackground="#282B35",
+            highlightthickness=0
         )
-        self.dash_prog_canvas.pack(fill="x", padx=30, pady=(2, 6))
-        self._dash_fill_id = self.dash_prog_canvas.create_rectangle(0, 0, 0, 12, fill="#EDEDF0", outline="")
+        self.cam_preview_label.image = self._cam_standby_photo
+        self.cam_preview_label.pack(expand=True, fill="both")
 
-        # Accelerometer State
-        self.accel_info = tk.Label(
-            telem_card,
-            text="Motion: [ READY ] | G-Magnitude: 1.00g | Peak: 0.00g",
-            font=("Consolas", 10),
-            fg="#71717A",
-            bg="#15171E"
-        )
-        self.accel_info.pack(pady=2)
+        # Section 3: Telemetry & Discipline Console
+        telem_card = tk.Frame(content, bg="#13151C", bd=1, relief="solid", highlightthickness=1, highlightbackground="#222530", padx=20, pady=12)
+        telem_card.pack(fill="x", padx=16, pady=(0, 12))
 
-        # Audio Output Status Row
-        self.audio_dest_info = tk.Label(
-            telem_card,
-            text=f"Active Speaker: {self.settings.get('speaker_output', 'laptop').upper()} SPEAKER",
-            font=("Segoe UI", 10),
-            fg="#A1A1AA",
-            bg="#15171E"
-        )
-        self.audio_dest_info.pack(pady=2)
+        # Telemetry Header Row
+        t_hdr = tk.Frame(telem_card, bg="#13151C")
+        t_hdr.pack(fill="x", pady=(0, 6))
 
-        # Test Penalty Overlay Button
-        test_frame = tk.Frame(content, bg="#0D0E12")
-        test_frame.pack(fill="x", padx=10, pady=(0, 8))
+        tk.Label(
+            t_hdr, text="KINETIC ENFORCEMENT", font=("Segoe UI", 8, "bold"),
+            bg="#13151C", fg="#A1A1AA"
+        ).pack(side="left")
 
+        # Compact discrete ghost test button inside header
         test_btn = tk.Button(
-            test_frame,
-            text="⚡   Test Penalty Screen & Audio Now",
-            font=("Segoe UI", 10, "bold"),
-            bg="#221417",
-            fg="#EF4444",
-            activebackground="#2E181C",
-            activeforeground="#FF5555",
+            t_hdr,
+            text="TEST LOCKOUT",
+            font=("Segoe UI", 7, "bold"),
+            bg="#181A22",
+            fg="#71717A",
+            activebackground="#242836",
+            activeforeground="#EF4444",
             bd=1,
             relief="solid",
-            pady=8,
+            highlightthickness=1,
+            highlightbackground="#2E3242",
+            padx=8,
+            pady=2,
             command=self.test_penalty,
             cursor="hand2"
         )
-        test_btn.pack(fill="x")
+        test_btn.pack(side="right", padx=(10, 0))
+
+        self.audio_dest_info = tk.Label(
+            t_hdr,
+            text=f"OUTPUT: {self.settings.get('speaker_output', 'laptop').upper()} SPEAKER",
+            font=("Segoe UI", 8, "bold"),
+            fg="#71717A",
+            bg="#13151C"
+        )
+        self.audio_dest_info.pack(side="right")
+
+        # Large Architectural Rep Counter in Monospace Tabular
+        self.reps_display = tk.Label(
+            telem_card,
+            text=f"00 / {self.settings.get('target_jumps', 10):02d}",
+            font=("Consolas", 32, "bold"),
+            fg="#EDEDF0",
+            bg="#13151C"
+        )
+        self.reps_display.pack(anchor="center", pady=(2, 2))
+
+        tk.Label(
+            telem_card, text="COMPLETED REPETITIONS", font=("Segoe UI", 8, "bold"),
+            bg="#13151C", fg="#8E94A5"
+        ).pack(anchor="center", pady=(0, 6))
+
+        # 10-Segment Tactile Gauge Canvas (matching hardware screen exactly)
+        self.dash_prog_canvas = tk.Canvas(
+            telem_card,
+            height=14,
+            bg="#13151C",
+            bd=0,
+            highlightthickness=0,
+        )
+        self.dash_prog_canvas.pack(fill="x", padx=30, pady=(0, 10))
+        self._gauge_rects = []
+        # Pre-render 10 track blocks
+        block_w = 34
+        gap = 5
+        start_gx = 10
+        for b in range(10):
+            bx = start_gx + b * (block_w + gap)
+            rect = self.dash_prog_canvas.create_rectangle(
+                bx, 1, bx + block_w, 13,
+                fill="#181A22", outline="#282B38", width=1
+            )
+            self._gauge_rects.append(rect)
+
+        # Structured 3-Column Telemetry Grid
+        telem_grid = tk.Frame(telem_card, bg="#13151C")
+        telem_grid.pack(fill="x", pady=(0, 4), padx=20)
+
+        # Col 1: Status
+        col1 = tk.Frame(telem_grid, bg="#13151C")
+        col1.pack(side="left", expand=True)
+        tk.Label(col1, text="STATE", font=("Segoe UI", 7, "bold"), bg="#13151C", fg="#71717A").pack()
+        self.lbl_telem_state = tk.Label(col1, text="STANDBY", font=("Consolas", 10, "bold"), bg="#13151C", fg="#A1A1AA")
+        self.lbl_telem_state.pack()
+
+        # Col 2: Current G
+        col2 = tk.Frame(telem_grid, bg="#13151C")
+        col2.pack(side="left", expand=True)
+        tk.Label(col2, text="CURRENT G", font=("Segoe UI", 7, "bold"), bg="#13151C", fg="#71717A").pack()
+        self.lbl_telem_cur_g = tk.Label(col2, text="1.00g", font=("Consolas", 10, "bold"), bg="#13151C", fg="#EDEDF0")
+        self.lbl_telem_cur_g.pack()
+
+        # Col 3: Peak G
+        col3 = tk.Frame(telem_grid, bg="#13151C")
+        col3.pack(side="left", expand=True)
+        tk.Label(col3, text="PEAK G", font=("Segoe UI", 7, "bold"), bg="#13151C", fg="#71717A").pack()
+        self.lbl_telem_peak_g = tk.Label(col3, text="0.00g", font=("Consolas", 10, "bold"), bg="#13151C", fg="#EDEDF0")
+        self.lbl_telem_peak_g.pack()
 
     def _on_cam_preview_toggle(self):
         self.preview_active = self.show_cam_preview.get()
@@ -572,13 +721,13 @@ class FocusAgentApp:
         vol = self.settings.get("freewili_volume", 100)
 
         if mode == "ble":
-            self.conn_badge.configure(text="BLE: SCANNING...", bg="#201F18", fg="#EDEDF0")
+            self.conn_badge.configure(text="● BLE SCANNING", bg="#181A22", fg="#8E94A5")
             self.freewili.start_ble()
         elif mode == "serial":
-            self.conn_badge.configure(text=f"SERIAL: {port}", bg="#181C26", fg="#EDEDF0")
+            self.conn_badge.configure(text=f"● SERIAL {port}", bg="#181A22", fg="#8E94A5")
             self.freewili.start_serial(port)
         else:
-            self.conn_badge.configure(text="MOCK MODE", bg="#1C1E26", fg="#EDEDF0")
+            self.conn_badge.configure(text="● MOCK EMULATOR", bg="#181A22", fg="#8E94A5")
             self.freewili.start_mock()
 
         # Send initial config after slight delay
@@ -594,18 +743,17 @@ class FocusAgentApp:
     def _process_telemetry_ui(self, t: FreeWiliTelemetry):
         # Update connection badge
         if self.freewili.is_connected:
-            self.conn_badge.configure(text="CONNECTED", bg="#18221D", fg="#EDEDF0")
+            self.conn_badge.configure(text="● HARDWARE LINKED", bg="#14231A", fg="#34D399")
         else:
-            self.conn_badge.configure(text="DISCONNECTED", bg="#261416", fg="#EF4444")
+            self.conn_badge.configure(text="● DISCONNECTED", bg="#261215", fg="#EF4444")
 
-        # Update Live G and State
-        g_val = getattr(t, "g_mg", 1000) / 1000.0
-        peak_raw = getattr(t, "peak_mg", getattr(t, "peak_g_mg", 0))
-        pk_val = peak_raw / 1000.0
-        st_name = getattr(t, "state_name", "READY")
-        self.accel_info.configure(
-            text=f"Motion: [ {st_name} ] | G-Magnitude: {g_val:.2f}g | Peak: {pk_val:.2f}g"
-        )
+        # Update 3-Column Micro-Grid
+        if hasattr(self, "lbl_telem_state"):
+            self.lbl_telem_state.configure(text=st_name.upper())
+        if hasattr(self, "lbl_telem_cur_g"):
+            self.lbl_telem_cur_g.configure(text=f"{g_val:.2f}g")
+        if hasattr(self, "lbl_telem_peak_g"):
+            self.lbl_telem_peak_g.configure(text=f"{pk_val:.2f}g")
 
         target = self.settings.get("target_jumps", 10)
 
@@ -614,7 +762,7 @@ class FocusAgentApp:
         if self.penalty_active:
             self.jumps_in_penalty = max(0, t.jumps - self.penalty_start_jumps)
             current_reps = self.jumps_in_penalty
-            self.reps_display.configure(text=f"REPS: {self.jumps_in_penalty} / {target}")
+            self.reps_display.configure(text=f"{self.jumps_in_penalty:02d} / {target:02d}")
 
             # Forward to fullscreen overlay
             self.overlay.update_reps(
@@ -631,25 +779,25 @@ class FocusAgentApp:
                     self.detector.reset_penalty()
                 logger.info("Jumping jack goal completed! Clearing penalty.")
                 self.status_banner.configure(
-                    text="PENALTY CLEARED // EXCELLENT DISCIPLINE!",
-                    bg="#181A22",
-                    fg="#EDEDF0"
+                    text="PENALTY RESOLVED  ·  DISCIPLINE RESTORED",
+                    bg="#14231A",
+                    fg="#34D399"
                 )
                 self.audio.play(SOUND_PENALTY_CLEARED)
                 self.overlay.show_victory_and_dismiss()
         else:
-            self.reps_display.configure(text=f"REPS: {t.jumps} / {target}")
+            self.reps_display.configure(text=f"{t.jumps:02d} / {target:02d}")
 
-        # Update Live Dashboard Progress Canvas (Frosted Silver or Crimson)
-        if hasattr(self, "dash_prog_canvas") and self.dash_prog_canvas.winfo_exists():
-            c_w = self.dash_prog_canvas.winfo_width()
-            if c_w < 10:
-                c_w = 460
+        # Update Live Dashboard 10-Block Tactile Gauge (matching hardware)
+        if hasattr(self, "_gauge_rects") and self._gauge_rects:
             ratio = min(1.0, current_reps / float(target)) if target > 0 else 0.0
-            fill_w = int(c_w * ratio)
-            bar_col = "#EF4444" if self.penalty_active else "#EDEDF0"
-            self.dash_prog_canvas.coords(self._dash_fill_id, 0, 0, fill_w, 12)
-            self.dash_prog_canvas.itemconfig(self._dash_fill_id, fill=bar_col)
+            completed_blocks = int(round(ratio * 10))
+            active_col = "#EF4444" if self.penalty_active else "#EDEDF0"
+            for idx, r_id in enumerate(self._gauge_rects):
+                if idx < completed_blocks:
+                    self.dash_prog_canvas.itemconfig(r_id, fill=active_col, outline=active_col)
+                else:
+                    self.dash_prog_canvas.itemconfig(r_id, fill="#181A22", outline="#282B38")
 
     # -------------------------------------------------------------
     # Penalty Management
@@ -754,17 +902,16 @@ class FocusAgentApp:
                 pass
             self.cap = None
 
-        self.start_btn.update_gradient("#1E222C", "#14161E", "#2B303E", "#1E222C", text="▶   START SENTINEL")
+        self.start_btn.update_gradient("#EDEDF2", "#D4D4D8", "#FFFFFF", "#E4E4E7", text="▶   START SENTINEL")
         self.status_banner.configure(
-            text="SENTINEL STOPPED // CLICK 'START' TO RESUME",
-            bg="#181A22",
-            fg="#A1A1AA"
+            text="SENTINEL STANDBY  ·  ACTIVATE POSTURE MONITORING",
+            bg="#181A24",
+            fg="#8E94A5"
         )
         if self.cam_preview_label:
-            self.cam_preview_label.configure(
-                image="",
-                text="\n\nSentinel Stopped. Click 'Start Sentinel' to activate webcam."
-            )
+            if hasattr(self, "_cam_standby_photo") and self._cam_standby_photo:
+                self.cam_preview_label.configure(image=self._cam_standby_photo, text="")
+                self.cam_preview_label.image = self._cam_standby_photo
             self._current_photo_image = None
 
     def _monitor_worker(self):
@@ -829,8 +976,8 @@ class FocusAgentApp:
                 if self.preview_active:
                     rgb = cv2.cvtColor(annotated_frame, cv2.COLOR_BGR2RGB)
                     h, w = rgb.shape[:2]
-                    # Preserve exact camera aspect ratio within 480x360 container
-                    scale = min(480.0 / w, 360.0 / h)
+                    # Preserve exact camera aspect ratio within 400x260 container
+                    scale = min(400.0 / w, 260.0 / h)
                     new_w = max(1, int(w * scale))
                     new_h = max(1, int(h * scale))
                     small_frame = cv2.resize(rgb, (new_w, new_h), interpolation=cv2.INTER_AREA)
