@@ -1,0 +1,37 @@
+{
+  "version": 3,
+  "cmakeMinimumRequired": { "major": 3, "minor": 21, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "target",
+      "displayName": "FreeWili OG target (RP2040, both CPUs) - Windows",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "PICO_SDK_PATH": "$env{USERPROFILE}/.pico-sdk/sdk/2.3.0",
+        "PICO_TOOLCHAIN_PATH": "$env{USERPROFILE}/.pico-sdk/toolchain/15_2_Rel1",
+        "CMAKE_MAKE_PROGRAM": "$env{USERPROFILE}/.pico-sdk/ninja/v1.13.2/ninja.exe",
+        "picotool_DIR": "$env{USERPROFILE}/.pico-sdk/picotool/2.3.0/picotool"
+      }
+    },
+    {
+      "name": "target-posix",
+      "displayName": "FreeWili OG target (RP2040, both CPUs) - macOS / Linux",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build",
+      "condition": { "type": "notEquals", "lhs": "${hostSystemName}", "rhs": "Windows" },
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "PICO_SDK_PATH": "$env{HOME}/.pico-sdk/sdk/2.3.0",
+        "PICO_TOOLCHAIN_PATH": "$env{HOME}/.pico-sdk/toolchain/15_2_Rel1",
+        "CMAKE_MAKE_PROGRAM": "$env{HOME}/.pico-sdk/ninja/v1.13.2/ninja"
+      }
+    }
+  ],
+  "buildPresets": [
+    { "name": "target", "configurePreset": "target" },
+    { "name": "target-posix", "configurePreset": "target-posix" }
+  ]
+}

@@ -1,0 +1,10 @@
+# Python packages for this repo's tools. Install with:
+#   python3 -m pip install -r requirements.txt
+# (on macOS/Linux, inside a virtual environment: python3 -m venv .venv && source .venv/bin/activate)
+
+# fw.py flash / bootsel / console and tools/bench.py talk to the board over USB serial.
+pyserial>=3.5
+
+# Only for maintainer tools, so not installed by default:
+#   Pillow                -- tools/gen_ogvegas_assets.py (regenerating the ogvegas assets)
+#   numpy, sounddevice    -- tools/bench_audio.py (audio bench test)

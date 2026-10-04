@@ -23,3 +23,4 @@ Step 3: Verification
 
 Todo:
 1. Program the jumping jack detection on the Free-Wili OG: This will be the first thing to do since the rest of the project depend on this working.
+2. Program the Free-Wili OG to do wireless communication with a laptop. Currently, sending only jumping jack count to laptop (TBR)
