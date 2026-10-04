@@ -882,18 +882,19 @@ class FocusAgentApp:
             self.root.after(30, self._poll_event_queue)
 
     def _poll_preview_queue(self):
+        pil_img = None
         try:
-            pil_img = None
             while True:
                 pil_img = self.preview_queue.get_nowait()
         except queue.Empty:
             pass
 
-        if pil_img and self.is_monitoring and self.preview_active:
+        if pil_img is not None and self.is_monitoring and self.preview_active:
             photo = ImageTk.PhotoImage(image=pil_img)
             self._current_photo_image = photo
             if self.cam_preview_label and self.cam_preview_label.winfo_exists():
                 self.cam_preview_label.configure(image=photo, text="")
+                self.cam_preview_label.image = photo
 
         self.root.after(33, self._poll_preview_queue)
 

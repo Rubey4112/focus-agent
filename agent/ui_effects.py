@@ -187,16 +187,19 @@ class GradientButton(tk.Label):
         self.color2 = color2
         self.hover_color1 = hover1
         self.hover_color2 = hover2
-        self._img_normal = ImageTk.PhotoImage(
+        new_normal = ImageTk.PhotoImage(
             create_horizontal_gradient_image(
                 self.width_px, self.height_px, color1, color2, corner_radius=self.corner_radius
             )
         )
-        self._img_hover = ImageTk.PhotoImage(
+        new_hover = ImageTk.PhotoImage(
             create_horizontal_gradient_image(
                 self.width_px, self.height_px, hover1, hover2, corner_radius=self.corner_radius
             )
         )
+        cfg = {"image": new_normal}
         if text is not None:
-            self.configure(text=text)
-        self.configure(image=self._img_normal)
+            cfg["text"] = text
+        self.configure(**cfg)
+        self._img_normal = new_normal
+        self._img_hover = new_hover
