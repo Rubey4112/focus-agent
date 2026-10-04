@@ -444,7 +444,7 @@ class FocusAgentApp:
 
         self.detector_chip = tk.Label(
             action_row,
-            text="POSTURE ENGINE: YUNET ONNX",
+            text="POSTURE ENGINE: YUNET + PRESAGE FOCUS",
             font=("Consolas", 8, "bold"),
             bg="#181A24",
             fg="#71717A",
@@ -766,9 +766,99 @@ class FocusAgentApp:
         self.trig_spin.insert(0, str(self.settings.get("trigger_duration_sec", 3.5)))
         self.trig_spin.pack(side="right")
 
+        # 7. Presage SmartSpectra Settings Card
+        p_card = tk.LabelFrame(
+            content,
+            text=" Presage SmartSpectra Focus & Distraction Sentinel ",
+            font=("Segoe UI", 10, "bold"),
+            bg="#15171E",
+            fg="#EDEDF0",
+            bd=1,
+            relief="solid",
+            highlightthickness=1,
+            highlightbackground="#222530",
+            padx=16,
+            pady=12,
+        )
+        p_card.pack(fill="x", pady=(16, 16))
+
+        p_row1 = tk.Frame(p_card, bg="#15171E")
+        p_row1.pack(fill="x", pady=4)
+        self.presage_enabled_var = tk.BooleanVar(value=self.settings.get("presage_enabled", True))
+        tk.Checkbutton(
+            p_row1,
+            text="Enable Presage Attention & Gaze Sentinel (Detects Head Turn & Loss of Focus)",
+            variable=self.presage_enabled_var,
+            font=("Segoe UI", 9, "bold"),
+            bg="#15171E",
+            fg="#EDEDF0",
+            selectcolor="#0D0E12",
+            activebackground="#15171E",
+            activeforeground="#EDEDF0",
+        ).pack(side="left")
+
+        p_row2 = tk.Frame(p_card, bg="#15171E")
+        p_row2.pack(fill="x", pady=6)
+        tk.Label(
+            p_row2,
+            text="Presage API Key:",
+            font=("Segoe UI", 10),
+            bg="#15171E",
+            fg="#A1A1AA",
+        ).pack(side="left")
+
+        self.presage_key_entry = tk.Entry(
+            p_row2,
+            font=("Consolas", 10),
+            bg="#0D0E12",
+            fg="#EDEDF0",
+            width=36,
+            bd=1,
+            show="*",
+        )
+        self.presage_key_entry.insert(
+            0, self.settings.get("presage_api_key", "")
+        )
+        self.presage_key_entry.pack(side="right")
+
+        p_row3 = tk.Frame(p_card, bg="#15171E")
+        p_row3.pack(fill="x", pady=4)
+
+        self._key_shown = False
+        def _toggle_key_vis():
+            self._key_shown = not self._key_shown
+            self.presage_key_entry.configure(show="" if self._key_shown else "*")
+            btn_show_key.configure(text="Hide Key" if self._key_shown else "Show Key")
+
+        btn_show_key = tk.Button(
+            p_row3,
+            text="Show Key",
+            font=("Segoe UI", 8),
+            bg="#1E222C",
+            fg="#A1A1AA",
+            bd=1,
+            relief="solid",
+            command=_toggle_key_vis,
+            cursor="hand2",
+        )
+        btn_show_key.pack(side="left", padx=(0, 10))
+
+        btn_test_presage = tk.Button(
+            p_row3,
+            text="⚡ Verify Presage Cloud Auth",
+            font=("Segoe UI", 8, "bold"),
+            bg="#1B385D",
+            fg="#60A5FA",
+            bd=1,
+            relief="solid",
+            command=self._test_presage_connection,
+            cursor="hand2",
+        )
+        btn_test_presage.pack(side="left")
+
         # Save Button with Frosted Matte Linear Gradient
         save_btn = GradientButton(
-            s_card,
+            content,
             text="💾   SAVE & APPLY SETTINGS",
             command=self.save_and_apply_settings,
             width_px=420,
@@ -780,11 +870,35 @@ class FocusAgentApp:
             fg="#EDEDF0",
             corner_radius=6,
         )
-        save_btn.pack(fill="x", pady=(20, 5))
+        save_btn.pack(fill="x", pady=(10, 15))
 
     def _on_volume_slider(self, val):
         pct = int(float(val))
         self.vol_label.configure(text=f"{pct}%")
+
+    def _test_presage_connection(self):
+        key = self.presage_key_entry.get().strip()
+        if not key:
+            messagebox.showerror("Presage Test", "Please enter a Presage API key.")
+            return
+        try:
+            from presage_sentinel import PresageSentinel
+            sentinel = PresageSentinel(api_key=key, enabled=True)
+            ok = sentinel.start_session()
+            if ok:
+                sentinel.stop_session()
+                messagebox.showinfo(
+                    "Presage Test",
+                    "Presage SmartSpectra Authentication Succeeded!\n\nAPI Key is valid and SDK graph initialized cleanly.",
+                )
+            else:
+                err_detail = getattr(sentinel, "last_error_message", None) or "Please check your API key and internet connectivity."
+                messagebox.showerror(
+                    "Presage Test",
+                    f"Presage Authentication Failed.\n\n{err_detail}",
+                )
+        except Exception as e:
+            messagebox.showerror("Presage Test", f"Error connecting to Presage: {e}")
 
     # -------------------------------------------------------------
     # Settings Application & FreeWili Sync
@@ -799,6 +913,9 @@ class FocusAgentApp:
             trig = float(self.trig_spin.get())
             spk = self.speaker_var.get()
 
+            presage_en = self.presage_enabled_var.get()
+            presage_k = self.presage_key_entry.get().strip()
+
             self.settings["target_jumps"] = target
             self.settings["freewili_volume"] = vol
             self.settings["connection_mode"] = mode
@@ -806,6 +923,8 @@ class FocusAgentApp:
             self.settings["camera_index"] = cam
             self.settings["trigger_duration_sec"] = trig
             self.settings["speaker_output"] = spk
+            self.settings["presage_enabled"] = presage_en
+            self.settings["presage_api_key"] = presage_k
 
             save_settings(self.settings)
 
@@ -1011,6 +1130,8 @@ class FocusAgentApp:
         self.is_monitoring = False
         if self.detector:
             self.detector.reset_penalty()
+            self.detector.release()
+            self.detector = None
         if self.cap:
             try:
                 self.cap.release()
@@ -1057,9 +1178,11 @@ class FocusAgentApp:
 
         try:
             self.detector = DoomscrollDetector(
-                trigger_duration_sec=self.settings.get("trigger_duration_sec", 3.5)
+                trigger_duration_sec=self.settings.get("trigger_duration_sec", 3.5),
+                presage_api_key=self.settings.get("presage_api_key", None),
+                presage_enabled=self.settings.get("presage_enabled", True),
             )
-            logger.info("DoomscrollDetector initialized successfully with YuNet/Haar.")
+            logger.info("DoomscrollDetector initialized successfully with YuNet/Haar & Presage.")
         except Exception as e:
             logger.error(f"Failed to initialize DoomscrollDetector: {e}", exc_info=True)
             self.event_queue.put(("camera_failed", f"Failed to initialize face detector: {e}"))

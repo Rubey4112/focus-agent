@@ -1,0 +1,134 @@
+syntax = "proto3";
+
+package physiology;
+
+enum FeatureType {
+  BREATHING = 0;
+  EDA = 2;
+  FACE = 3;
+  CARDIO = 4;
+}
+
+enum MetricType {
+  CHEST_BREATHING = 0;
+  ABDOMEN_BREATHING = 1;
+  BREATHING_RATE = 2;
+  BREATHING_AMPLITUDE = 3;
+  APNEA = 4;
+  RESPIRATORY_LINE_LENGTH = 5;
+  BASELINE = 6;
+  INHALE_EXHALE_RATIO = 7;
+  EDA_TRACE = 10;
+  FACE_LANDMARKS = 11;
+  BLINKING = 12;
+  TALKING = 13;
+  EXPRESSIONS = 14;
+  PULSE_RATE = 15;
+  ARTERIAL_PRESSURE_TRACE = 16;
+  HRV = 17;
+}
+
+message Measurement {
+  float value = 1;
+  bool stable = 2;
+  int64 timestamp = 3;
+}
+
+message DetectionStatus {
+  bool detected = 1;
+  bool stable = 2;
+  int64 timestamp = 3;
+}
+
+message MeasurementWithConfidence {
+  float value = 1;
+  bool stable = 2;
+  float confidence = 3;
+  int64 timestamp = 4;
+}
+
+enum ExpressionType {
+  UNSPECIFIED = 0;
+  ANGRY = 1;
+  CONTEMPT = 2;
+  DISGUST = 3;
+  FEAR = 4;
+  HAPPY = 5;
+  NEUTRAL = 6;
+  SAD = 7;
+  SURPRISE = 8;
+}
+
+message ExpressionScore {
+  ExpressionType type = 1;
+  float confidence = 2;
+}
+
+message Expression {
+  bool stable = 1;
+  int64 timestamp = 2;
+  repeated ExpressionScore scores = 3;
+}
+
+message Hrv {
+  double rmssd = 1;
+  double mean_nn = 2;
+  double sdnn = 3;
+  double baevsky = 4;
+  int64 timestamp = 5;
+  float confidence = 6;
+  bool stable = 7;
+}
+
+message Pulse {
+  repeated MeasurementWithConfidence rate = 1;
+  repeated Measurement trace = 2;
+  repeated Measurement pulse_respiration_quotient = 3;
+}
+
+message Breathing {
+  repeated MeasurementWithConfidence rate = 1;
+  repeated Measurement upper_trace = 2;
+  repeated Measurement lower_trace = 3;
+  repeated Measurement amplitude = 4;
+  repeated DetectionStatus apnea = 5;
+  repeated Measurement respiratory_line_length = 6;
+  repeated Measurement baseline = 7;
+  repeated Measurement inhale_exhale_ratio = 8;
+}
+
+message Point2dFloat {
+  float x = 1;
+  float y = 2;
+}
+
+message Landmarks {
+  repeated Point2dFloat value = 1;
+  bool stable = 2;
+  bool reset = 3;
+  int64 timestamp = 4;
+}
+
+message Face {
+  repeated DetectionStatus blinking = 1;
+  repeated DetectionStatus talking = 2;
+  repeated Landmarks landmarks = 3;
+  repeated Expression expression = 4;
+}
+
+message Eda {
+  repeated Measurement trace = 1;
+}
+
+message Cardio {
+  repeated MeasurementWithConfidence pulse_rate = 1;
+  repeated MeasurementWithConfidence arterial_pressure_trace = 2;
+  repeated Hrv hrv = 3;
+}
+
+message Metrics {
+  Breathing breathing = 1;
+  Eda eda = 3;
+  Face face = 4;
+  Cardio cardio = 5;
+}

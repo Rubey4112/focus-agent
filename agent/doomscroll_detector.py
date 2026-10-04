@@ -11,8 +11,23 @@ import os
 import sys
 import time
 from typing import Tuple, Optional
+import logging
 import cv2
 import numpy as np
+
+logger = logging.getLogger("DoomscrollDetector")
+
+
+from presage_sentinel import (
+    PresageSentinel,
+    VALIDATION_OK,
+    VALIDATION_FACE_NOT_FORWARD,
+    VALIDATION_FACE_TOO_LOW,
+    VALIDATION_FACE_NOT_CENTERED,
+    VALIDATION_NO_FACE_FOUND,
+    VALIDATION_EXCESSIVE_MOTION,
+    DISTRACTION_CODES,
+)
 
 
 def get_model_path(model_name: str) -> Optional[str]:
@@ -55,17 +70,45 @@ def get_cascade_path(xml_name: str) -> str:
 
 
 class DoomscrollDetector:
-    def __init__(self, trigger_duration_sec: float = 3.5):
+    def __init__(
+        self,
+        trigger_duration_sec: float = 3.5,
+        presage_api_key: Optional[str] = None,
+        presage_enabled: bool = True,
+    ):
         self.trigger_duration_sec = trigger_duration_sec
         self.look_down_start: Optional[float] = None
         self.last_look_down_time: float = 0.0
         self.is_doomscrolling = False
+        self.current_distraction_reason: str = ""
 
         # Baseline posture metrics
         self.baseline_face_y: Optional[float] = None
         self.baseline_pitch: Optional[float] = None
         self.baseline_nose_rel: Optional[float] = None
         self.last_seen_face_time: float = 0.0
+
+        # Presage SmartSpectra Sentinel integration
+        self.presage_enabled = presage_enabled
+        if not presage_api_key:
+            try:
+                from settings_manager import get_default_api_key
+                presage_api_key = get_default_api_key()
+            except Exception:
+                presage_api_key = os.getenv("PRESAGE_API_KEY") or os.getenv("SMARTSPECTRA_API_KEY") or ""
+        self.presage_api_key = (presage_api_key or "").strip()
+        self.presage: Optional[PresageSentinel] = None
+        if self.presage_enabled:
+            try:
+                self.presage = PresageSentinel(
+                    api_key=self.presage_api_key,
+                    distraction_debounce_sec=self.trigger_duration_sec,
+                    enabled=True,
+                )
+                self.presage.start_session()
+            except Exception as e:
+                logger.error(f"Failed to start Presage Sentinel: {e}")
+                self.presage = None
 
         # 1. Initialize YuNet deep learning detector (ultra-lightweight, 5 landmarks)
         self.yunet = None
@@ -245,43 +288,86 @@ class DoomscrollDetector:
             looking_down = True
 
         # ---------------------------------------------------------
+        # Strategy C: Presage SmartSpectra Focus & Distraction Engine
+        # ---------------------------------------------------------
+        presage_distracted = False
+        presage_reason = ""
+        presage_telem = {}
+        if self.presage and self.presage_enabled:
+            try:
+                self.presage.push_frame(frame)
+                presage_telem = self.presage.get_telemetry()
+                val_code = presage_telem.get("validation_code", 0)
+                if presage_telem.get("is_distracted"):
+                    presage_distracted = True
+                    presage_reason = presage_telem.get("distraction_reason") or "PRESAGE: SCREEN FOCUS LOST"
+                elif val_code in DISTRACTION_CODES:
+                    presage_distracted = True
+                    presage_reason = f"PRESAGE: {DISTRACTION_CODES[val_code]}"
+            except Exception as pe:
+                logger.debug(f"Presage frame processing error: {pe}")
+
+        # Combined distraction state:
+        # User is distracted if either posture looking down (YuNet / Haar) or Presage detected loss of focus
+        is_distracted = looking_down or presage_distracted
+        if looking_down:
+            current_reason = "HEAD DOWN / LAP PHONE"
+        elif presage_distracted:
+            current_reason = presage_reason or "SCREEN FOCUS LOST"
+        else:
+            current_reason = ""
+
+        # ---------------------------------------------------------
         # Temporal accumulation & debounce logic
         # ---------------------------------------------------------
-        duration_down = 0.0
-        if looking_down:
+        duration_distracted = 0.0
+        if is_distracted:
+            self.current_distraction_reason = current_reason
             self.last_look_down_time = now
             if self.look_down_start is None:
                 self.look_down_start = now
-            duration_down = now - self.look_down_start
+            duration_distracted = now - self.look_down_start
 
-            if duration_down >= self.trigger_duration_sec:
+            if duration_distracted >= self.trigger_duration_sec:
                 self.is_doomscrolling = True
         else:
             if self.look_down_start is not None:
                 # Brief flicker grace period (0.6s)
                 if (now - self.last_look_down_time) < 0.6:
-                    duration_down = now - self.look_down_start
-                    if duration_down >= self.trigger_duration_sec:
+                    duration_distracted = now - self.look_down_start
+                    if duration_distracted >= self.trigger_duration_sec:
                         self.is_doomscrolling = True
                 else:
                     self.look_down_start = None
-                    duration_down = 0.0
+                    duration_distracted = 0.0
+                    self.current_distraction_reason = ""
             else:
-                duration_down = 0.0
+                duration_distracted = 0.0
+                self.current_distraction_reason = ""
 
         # Render HUD Overlay
         try:
-            self._render_hud(frame, duration_down, looking_down, face_detected, pitch_val)
+            self._render_hud(
+                frame,
+                duration_distracted,
+                is_distracted,
+                face_detected,
+                pitch_val,
+                presage_telem,
+            )
         except Exception:
             pass
 
-        return frame, self.is_doomscrolling, duration_down
+        return frame, self.is_doomscrolling, duration_distracted
 
     def reset_penalty(self):
         """Reset penalty state upon workout completion or emergency bypass."""
         self.is_doomscrolling = False
         self.look_down_start = None
         self.last_look_down_time = 0.0
+        self.current_distraction_reason = ""
+        if self.presage:
+            self.presage.reset_penalty()
 
     def calibrate_baseline(self):
         """Recalibrate neutral posture."""
@@ -290,6 +376,11 @@ class DoomscrollDetector:
         self.baseline_nose_rel = None
         self.reset_penalty()
 
+    def release(self):
+        """Release all resources including Presage session."""
+        if self.presage:
+            self.presage.stop_session()
+
     def _render_hud(
         self,
         frame: np.ndarray,
@@ -297,6 +388,7 @@ class DoomscrollDetector:
         looking_down: bool,
         face_detected: bool,
         pitch_val: float,
+        presage_telem: Optional[dict] = None,
     ):
         h, w = frame.shape[:2]
         overlay = frame.copy()
@@ -308,17 +400,19 @@ class DoomscrollDetector:
         prog_col = (50, 50, 235)  # Crimson warning accent (BGR)
 
         if self.is_doomscrolling:
-            status_text = "PENALTY ACTIVE // DOOMSCROLL DETECTED"
+            reason = self.current_distraction_reason or "DOOMSCROLL DETECTED"
+            status_text = f"PENALTY ACTIVE // {reason}"
             pill_col = (20, 20, 140)
             text_col = (245, 245, 248)
             border_col = (50, 50, 235)
         elif looking_down:
-            status_text = f"WARNING: HEAD DOWN ({duration_down:.1f}s / {self.trigger_duration_sec:.1f}s)"
+            reason = self.current_distraction_reason or "DISTRACTION DETECTED"
+            status_text = f"WARNING: {reason} ({duration_down:.1f}s / {self.trigger_duration_sec:.1f}s)"
             pill_col = (22, 28, 70)
             text_col = (245, 245, 248)
             border_col = (45, 75, 215)
         elif face_detected:
-            status_text = f"SENTINEL ACTIVE // UPRIGHT POSTURE (Pitch: {pitch_val:.1f}x)"
+            status_text = f"SENTINEL ACTIVE // SCREEN FOCUSED (Pitch: {pitch_val:.1f}x)"
             pill_col = (26, 28, 35)
             text_col = (225, 230, 238)
             border_col = (65, 70, 84)
@@ -329,10 +423,35 @@ class DoomscrollDetector:
             border_col = (50, 54, 65)
 
         # Draw status pill container with frosted border
-        tw = int(cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.50, 2)[0][0])
+        tw = int(cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.46, 2)[0][0])
         px1, py1, px2, py2 = 14, 8, 28 + tw, 36
         cv2.rectangle(overlay, (px1, py1), (px2, py2), pill_col, -1)
         cv2.rectangle(overlay, (px1, py1), (px2, py2), border_col, 1)
+
+        # Presage Telemetry Badge (Top Right)
+        if presage_telem and presage_telem.get("is_running"):
+            pulse = presage_telem.get("pulse_rate")
+            if pulse and pulse > 0:
+                p_text = f"PRESAGE // HR: {int(pulse)} BPM"
+                p_pill_col = (28, 48, 32)
+                p_border_col = (60, 180, 90)
+                p_text_col = (180, 245, 195)
+            elif presage_telem.get("is_distracted"):
+                p_text = "PRESAGE // DISTRACTED"
+                p_pill_col = (22, 28, 70)
+                p_border_col = (45, 75, 215)
+                p_text_col = (245, 245, 248)
+            else:
+                p_text = "PRESAGE // FOCUS LOCKED"
+                p_pill_col = (20, 36, 26)
+                p_border_col = (45, 120, 65)
+                p_text_col = (160, 230, 180)
+
+            ptw = int(cv2.getTextSize(p_text, cv2.FONT_HERSHEY_SIMPLEX, 0.44, 2)[0][0])
+            bx1 = w - ptw - 28
+            bx2 = w - 14
+            cv2.rectangle(overlay, (bx1, 8), (bx2, 36), p_pill_col, -1)
+            cv2.rectangle(overlay, (bx1, 8), (bx2, 36), p_border_col, 1)
 
         # Alpha composite frosted header
         cv2.addWeighted(overlay, 0.82, frame, 0.18, 0, frame)
@@ -343,13 +462,26 @@ class DoomscrollDetector:
             status_text,
             (21, 27),
             cv2.FONT_HERSHEY_SIMPLEX,
-            0.50,
+            0.46,
             text_col,
             2,
             cv2.LINE_AA,
         )
 
-        # Countdown Progress Line below header if looking down
+        # Draw Presage telemetry text on composite frame
+        if presage_telem and presage_telem.get("is_running"):
+            cv2.putText(
+                frame,
+                p_text,
+                (bx1 + 8, 27),
+                cv2.FONT_HERSHEY_SIMPLEX,
+                0.44,
+                p_text_col,
+                2,
+                cv2.LINE_AA,
+            )
+
+        # Countdown Progress Line below header if looking down / distracted
         if looking_down and duration_down > 0:
             ratio = min(1.0, duration_down / float(self.trigger_duration_sec))
             prog_w = int(w * ratio)

@@ -30,14 +30,32 @@ VOICE_DISMISSED   = 5   # "Attention! Penalty cleared! Lock in! Dismissed!"
 
 
 class FocusAgent:
-    def __init__(self, target_jumps: int = 10, trigger_sec: float = 3.5, volume: int = 100):
+    def __init__(
+        self,
+        target_jumps: int = 10,
+        trigger_sec: float = 3.5,
+        volume: int = 100,
+        presage_api_key: str = None,
+        presage_enabled: bool = True,
+    ):
+        if not presage_api_key:
+            try:
+                from settings_manager import get_default_api_key
+                presage_api_key = get_default_api_key()
+            except Exception:
+                import os
+                presage_api_key = os.getenv("PRESAGE_API_KEY") or os.getenv("SMARTSPECTRA_API_KEY") or ""
         self.target_jumps = target_jumps
         self.volume = max(0, min(100, volume))
         self.penalty_active = False
         self.penalty_start_count = 0
         self.jumps_completed_in_penalty = 0
 
-        self.detector = DoomscrollDetector(trigger_duration_sec=trigger_sec)
+        self.detector = DoomscrollDetector(
+            trigger_duration_sec=trigger_sec,
+            presage_api_key=presage_api_key,
+            presage_enabled=presage_enabled,
+        )
         self.freewili = FreeWiliClient(on_telemetry=self.on_freewili_telemetry)
         self.freewili.latest_telemetry.target = target_jumps
 
@@ -125,6 +143,7 @@ class FocusAgent:
 
         cap.release()
         cv2.destroyAllWindows()
+        self.detector.release()
         self.freewili.stop()
 
     def _draw_penalty_hud(self, frame: np.ndarray):

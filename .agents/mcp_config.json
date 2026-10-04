@@ -1,0 +1,7 @@
+{
+  "mcpServers": {
+    "smartspectra": {
+      "serverUrl": "https://mcp.presagetech.com/mcp"
+    }
+  }
+}
