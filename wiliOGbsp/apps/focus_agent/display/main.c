@@ -37,20 +37,15 @@ static void play_alert_sound(uint8_t sound_id) {
     }
 }
 
-/* ---- Display Palette (RGB565) ---- */
-#define COL_BG          st7789_rgb565(12, 16, 26)       /* Deep Obsidian Navy */
-#define COL_HDR_BG      st7789_rgb565(26, 32, 58)       /* Indigo Header */
-#define COL_CYAN        st7789_rgb565(0, 230, 255)      /* Electric Cyan */
-#define COL_CARD_BG     st7789_rgb565(20, 25, 40)       /* Card Slate */
-#define COL_CARD_BORDER st7789_rgb565(42, 55, 88)       /* Subtle Border */
-#define COL_MUTED       st7789_rgb565(130, 145, 175)    /* Muted Slate Text */
-#define COL_WHITE       0xFFFFu                         /* Pure White */
-#define COL_EMERALD     st7789_rgb565(0, 255, 130)      /* Neon Emerald */
-#define COL_GOLD        st7789_rgb565(255, 210, 0)      /* Solar Gold */
-#define COL_ORANGE      st7789_rgb565(255, 140, 0)      /* Vivid Orange */
-#define COL_PURPLE      st7789_rgb565(190, 80, 255)     /* Flight Purple */
-#define COL_RED         st7789_rgb565(255, 50, 60)      /* Coral Red */
-#define COL_TRACK       st7789_rgb565(32, 38, 54)       /* Gauge Track */
+/* ---- Minimalist House Arrest Tether Palette (RGB565) ---- */
+#define COL_BG_BLACK    st7789_rgb565(8, 8, 10)         /* Pure Void Charcoal */
+#define COL_PANEL       st7789_rgb565(16, 18, 22)       /* Frosted Charcoal Card */
+#define COL_BORDER      st7789_rgb565(36, 40, 48)       /* Subtle Frosted Zinc Border */
+#define COL_TRACK       st7789_rgb565(24, 26, 32)       /* Solid Dark Track */
+#define COL_WHITE       0xFFFFu                         /* Crisp Stark White */
+#define COL_MUTED       st7789_rgb565(120, 125, 138)    /* Tactical Silver */
+#define COL_CRIMSON     st7789_rgb565(250, 45, 60)      /* Enforcement Alert Crimson */
+#define COL_EMERALD     st7789_rgb565(16, 185, 129)     /* Restored Emerald */
 
 /* ---- Jumping Jack Detection Engine ---- */
 typedef enum {
@@ -121,42 +116,30 @@ static inline uint32_t isqrt(uint32_t val) {
     return res;
 }
 
-/* UI Card Outline Helper */
-static void draw_card(uint16_t x, uint16_t y, uint16_t w, uint16_t h, uint16_t bg, uint16_t border) {
-    st7789_fill_rect(x, y, w, h, bg);
-    st7789_fill_rect(x, y, w, 1, border);
-    st7789_fill_rect(x, y + h - 1, w, 1, border);
-    st7789_fill_rect(x, y, 1, h, border);
-    st7789_fill_rect(x + w - 1, y, 1, h, border);
-}
-
-/* Static UI Chrome drawn once at boot */
+/* Minimalist House Arrest Tether UI drawn once at boot */
 static void draw_static_ui(void) {
-    st7789_clear(COL_BG);
+    /* Pure Void Charcoal Canvas */
+    st7789_fill_rect(0, 0, ST7789_W, ST7789_H, COL_BG_BLACK);
     st7789_dma_wait();
 
-    /* Header Banner */
-    st7789_fill_rect(0, 0, ST7789_W, 30, COL_HDR_BG);
-    st7789_fill_rect(0, 30, ST7789_W, 2, COL_CYAN);
-    lcd_text_draw(12, 7, "FOCUS AGENT", 2, COL_CYAN, COL_HDR_BG);
+    /* Header Bar (y: 0 to 28) */
+    st7789_fill_rect(0, 0, ST7789_W, 28, COL_BG_BLACK);
+    st7789_fill_rect(0, 28, ST7789_W, 1, COL_BORDER);
+    lcd_text_draw(12, 10, "FOCUS AGENT // TETHER", 1, COL_WHITE, COL_BG_BLACK);
+    lcd_text_draw(228, 10, "[LOCKED]", 1, COL_CRIMSON, COL_BG_BLACK);
 
-    /* Main Counter Card */
-    draw_card(10, 38, 300, 106, COL_CARD_BG, COL_CARD_BORDER);
-    lcd_text_draw(20, 46, "JUMPING JACKS", 1, COL_MUTED, COL_CARD_BG);
+    /* Centerpiece Discipline Card (y: 34 to 176, w: 304, h: 142) */
+    st7789_fill_rect(8, 34, 304, 142, COL_PANEL);
+    st7789_fill_rect(8, 34, 304, 1, COL_BORDER);
+    st7789_fill_rect(8, 175, 304, 1, COL_BORDER);
+    st7789_fill_rect(8, 34, 1, 142, COL_BORDER);
+    st7789_fill_rect(311, 34, 1, 142, COL_BORDER);
 
-    /* Accelerometer Status Card */
-    draw_card(10, 150, 300, 54, COL_CARD_BG, COL_CARD_BORDER);
+    lcd_text_draw(84, 44, "JUMPING JACK COUNT", 1, COL_MUTED, COL_PANEL);
 
-    /* Bottom Button Controls Guide */
-    st7789_fill_rect(0, 210, ST7789_W, 1, COL_CARD_BORDER);
-    lcd_text_draw(8, 220, "[GRN]", 1, COL_EMERALD, COL_BG);
-    lcd_text_draw(40, 220, "Reset", 1, COL_MUTED, COL_BG);
-    lcd_text_draw(88, 220, "[BLU]", 1, COL_CYAN, COL_BG);
-    lcd_text_draw(120, 220, "+5", 1, COL_MUTED, COL_BG);
-    lcd_text_draw(148, 220, "[YEL]", 1, COL_GOLD, COL_BG);
-    lcd_text_draw(180, 220, "-5", 1, COL_MUTED, COL_BG);
-    lcd_text_draw(208, 220, "[GRY]", 1, COL_PURPLE, COL_BG);
-    lcd_text_draw(240, 220, "Sens", 1, COL_MUTED, COL_BG);
+    /* Bottom Restraint Status Frame (y: 184 to 238) */
+    st7789_fill_rect(0, 184, ST7789_W, 1, COL_BORDER);
+    lcd_text_draw(12, 222, "TETHER STATUS: TAMPER CONTROLS LOCKED", 1, COL_MUTED, COL_BG_BLACK);
 }
 
 int main(void) {
@@ -227,26 +210,12 @@ int main(void) {
         /* 1. Poll power button & front panel buttons */
         fwog_power_t p = fwog_power_poll(now_ms);
 
-        /* Button controls */
-        if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_GREEN)) {
-            count = 0;
-            flash_until_ms = now_ms + 250;
-            DIAG("[focus_agent] Counter reset to 0\n");
-            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
-        }
-        if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_BLUE)) {
-            if (target < 100) target += 5;
-            DIAG("[focus_agent] Target increased to %u\n", (unsigned)target);
-            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
-        }
-        if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_YELLOW)) {
-            if (target > 5) target -= 5;
-            DIAG("[focus_agent] Target decreased to %u\n", (unsigned)target);
-            send_telemetry((uint16_t)count, (uint16_t)target, (uint8_t)state, (uint16_t)r_smooth_mg, (uint16_t)last_jump_peak_mg);
-        }
-        if (p.buttons.pressed & FWOG_BTN_BIT(FWOG_BTN_GRAY)) {
-            sens = (sens + 1) % SENS_COUNT;
-            DIAG("[focus_agent] Sensitivity changed to %s\n", s_thresholds[sens].name);
+        /* Button controls: All tamper actions (reset count, edit goal) are DISABLED.
+         * House arrest bracelet enforcement is controlled exclusively by the host agent. */
+        if (p.buttons.pressed & (FWOG_BTN_BIT(FWOG_BTN_GREEN) | FWOG_BTN_BIT(FWOG_BTN_BLUE) |
+                                 FWOG_BTN_BIT(FWOG_BTN_YELLOW) | FWOG_BTN_BIT(FWOG_BTN_GRAY))) {
+            DIAG("[focus_agent] Tamper button press blocked: device is locked\n");
+            flash_until_ms = now_ms + 180;
         }
 
         /* 2. Sample Accelerometer (100 Hz ODR)
@@ -348,34 +317,28 @@ int main(void) {
             }
         }
 
-        /* 4. Update WS2812 LEDs */
+        /* 4. Update WS2812 LEDs - Minimalist Tactical House Arrest Mode */
         if (ws_ok && !p.armed) {
             if (now_ms < flash_until_ms) {
-                /* Flash brilliant emerald on detected jump */
+                /* Flash crisp stark white on detected jump */
                 for (unsigned i = 0; i < FWOG_LED_COUNT; i++) {
-                    ws2812_set_color(i, 0, 255, 60);
+                    ws2812_set_color(i, 255, 255, 255);
                 }
             } else if (count >= target) {
-                /* Target reached: celebration rainbow wave */
-                const uint32_t phase = (now_ms / 100) % 6;
-                static const uint8_t rainbow[6][3] = {
-                    {255, 0, 0}, {255, 120, 0}, {255, 220, 0},
-                    {0, 255, 50}, {0, 180, 255}, {180, 0, 255}
-                };
+                /* Target reached: solid discipline emerald */
                 for (unsigned i = 0; i < FWOG_LED_COUNT; i++) {
-                    const unsigned ci = (phase + i) % 6;
-                    ws2812_set_color(i, rainbow[ci][0], rainbow[ci][1], rainbow[ci][2]);
+                    ws2812_set_color(i, 0, 255, 80);
                 }
             } else {
-                /* Progress bar across 7 LEDs */
+                /* Clean stark white progress bar */
                 const unsigned lit_leds = (target > 0) ? ((count % target) * FWOG_LED_COUNT / target) : 0;
                 for (unsigned i = 0; i < FWOG_LED_COUNT; i++) {
                     if (i < lit_leds) {
-                        ws2812_set_color(i, 0, 80, 200);   /* Vivid Cyan-Blue */
+                        ws2812_set_color(i, 160, 160, 180);   /* Crisp White */
                     } else if (i == lit_leds) {
-                        ws2812_set_color(i, 0, 25, 60);    /* Dim Lead */
+                        ws2812_set_color(i, 40, 40, 50);      /* Dim Lead */
                     } else {
-                        ws2812_set_color(i, 1, 2, 6);      /* Ambient */
+                        ws2812_set_color(i, 0, 0, 0);         /* Blackout */
                     }
                 }
             }
@@ -386,122 +349,81 @@ int main(void) {
         if (st7789_ready() && time_reached(next_ui_update)) {
             next_ui_update = make_timeout_time_ms(33);
 
-            /* Sensitivity Pill in Header */
-            if ((int32_t)sens != last_disp_sens) {
-                last_disp_sens = (int32_t)sens;
-                char sens_str[16];
-                snprintf(sens_str, sizeof(sens_str), "SENS: %-4s", s_thresholds[sens].name);
-                lcd_text_draw_padded(216, 11, sens_str, 10, 1, COL_GOLD, COL_HDR_BG);
-            }
-
-            /* Target Label in Counter Card */
-            if ((int32_t)target != last_disp_target) {
-                last_disp_target = (int32_t)target;
-                char tgt_str[16];
-                snprintf(tgt_str, sizeof(tgt_str), "GOAL: %2u", (unsigned)target);
-                lcd_text_draw_padded(230, 46, tgt_str, 8, 1, COL_GOLD, COL_CARD_BG);
-            }
-
-            /* Big Counter Number */
+            /* Giant Centerpiece Rep Counter (Scale 6) */
             if ((int32_t)count != last_disp_count || (now_ms < flash_until_ms)) {
                 last_disp_count = (int32_t)count;
 
                 char count_buf[8];
                 snprintf(count_buf, sizeof(count_buf), "%4u", (unsigned)count);
 
-                uint16_t num_col = COL_EMERALD;
+                uint16_t num_col = COL_WHITE;
                 if (now_ms < flash_until_ms) {
-                    num_col = COL_WHITE;
+                    num_col = COL_CRIMSON;
                 } else if (count >= target) {
-                    num_col = COL_GOLD;
+                    num_col = COL_EMERALD;
                 }
-                /* Scale 4: 4 chars * 24px = 96px width. Centered at x=112, y=60 */
-                lcd_text_draw_padded(112, 60, count_buf, 4, 4, num_col, COL_CARD_BG);
 
-                /* Target reached banner inside card */
+                /* Scale 6: 4 chars * 36px = 144px width. Centered at x = 88, y = 60. Height = 48px */
+                lcd_text_draw_padded(88, 60, count_buf, 4, 6, num_col, COL_PANEL);
+
+                /* Target Reps Requirement below giant number */
+                char tgt_buf[32];
                 if (count >= target) {
-                    lcd_text_draw_padded(50, 96, "★ GOAL REACHED! ★", 17, 1, COL_GOLD, COL_CARD_BG);
+                    snprintf(tgt_buf, sizeof(tgt_buf), "GOAL SECURED: %u / %u REPS", (unsigned)count, (unsigned)target);
+                    lcd_text_draw_padded(64, 116, tgt_buf, 26, 1, COL_EMERALD, COL_PANEL);
                 } else {
-                    char prog_lbl[32];
-                    const unsigned pct = (target > 0) ? (count * 100 / target) : 0;
-                    snprintf(prog_lbl, sizeof(prog_lbl), "%u of %u (%u%%)",
-                             (unsigned)count, (unsigned)target, pct);
-                    lcd_text_draw_padded(50, 96, prog_lbl, 20, 1, COL_MUTED, COL_CARD_BG);
+                    snprintf(tgt_buf, sizeof(tgt_buf), "REQUIRED: %u REPETITIONS", (unsigned)target);
+                    lcd_text_draw_padded(82, 116, tgt_buf, 24, 1, COL_MUTED, COL_PANEL);
                 }
             }
 
-            /* Progress Bar (width: 276 px) */
-            uint32_t prog_w = (target > 0) ? ((count > target ? target : count) * 276 / target) : 0;
+            /* Minimalist High-Contrast Progress Bar (width: 272 px) */
+            uint32_t prog_w = (target > 0) ? ((count > target ? target : count) * 272 / target) : 0;
             if (prog_w != last_disp_prog_w) {
                 last_disp_prog_w = prog_w;
-                const uint16_t fill_col = (count >= target) ? COL_GOLD : COL_CYAN;
+                uint16_t fill_col = (count >= target) ? COL_EMERALD : COL_WHITE;
                 if (prog_w > 0) {
-                    st7789_fill_rect(22, 114, (uint16_t)prog_w, 10, fill_col);
+                    st7789_fill_rect(24, 134, (uint16_t)prog_w, 8, fill_col);
                 }
-                if (prog_w < 276) {
-                    st7789_fill_rect(22 + (uint16_t)prog_w, 114, (uint16_t)(276 - prog_w), 10, COL_TRACK);
+                if (prog_w < 272) {
+                    st7789_fill_rect(24 + (uint16_t)prog_w, 134, (uint16_t)(272 - prog_w), 8, COL_TRACK);
                 }
+                st7789_fill_rect(24, 133, 272, 1, COL_BORDER);
             }
 
-            /* Jump State Badge */
+            /* Jump State & Kinetic Motion Indicator inside centerpiece card */
             if ((int32_t)state != last_disp_state) {
                 last_disp_state = (int32_t)state;
                 const char *state_names[] = {
-                    "[ READY     ]",
-                    "[ DIP       ]",
-                    "[ THRUST >> ]",
-                    "[ AIRBORNE! ]",
-                    "[ JUMP +1!  ]"
+                    "STANDBY",
+                    "DIP",
+                    "THRUST",
+                    "AIRBORNE",
+                    "JUMP +1"
                 };
-                const uint16_t state_cols[] = {
-                    COL_CYAN,
-                    COL_MUTED,
-                    COL_ORANGE,
-                    COL_PURPLE,
-                    COL_EMERALD
-                };
-                lcd_text_draw_padded(20, 158, state_names[state], 13, 1, state_cols[state], COL_CARD_BG);
+                char st_buf[32];
+                if (count >= target) {
+                    snprintf(st_buf, sizeof(st_buf), "STATUS: [ ACCESS RESTORED ]");
+                    lcd_text_draw_padded(64, 152, st_buf, 26, 1, COL_EMERALD, COL_PANEL);
+                } else {
+                    snprintf(st_buf, sizeof(st_buf), "MOTION: [ %-12s ]", state_names[state]);
+                    lcd_text_draw_padded(76, 152, st_buf, 24, 1, (state == JJ_STATE_LANDED ? COL_WHITE : COL_MUTED), COL_PANEL);
+                }
             }
 
-            /* Acceleration Metrics */
-            if (abs((int)r_smooth_mg - (int)last_disp_r) > 15 || now_ms < flash_until_ms) {
+            /* Lower Frame: Real-Time Acceleration Metrics */
+            if (abs((int)r_smooth_mg - (int)last_disp_r) > 20 || now_ms < flash_until_ms) {
                 last_disp_r = r_smooth_mg;
 
-                char g_buf[32];
+                char g_buf[40];
                 const unsigned g_int = r_smooth_mg / 1000;
                 const unsigned g_dec = (r_smooth_mg % 1000) / 10;
                 const unsigned p_int = last_jump_peak_mg / 1000;
                 const unsigned p_dec = (last_jump_peak_mg % 1000) / 10;
 
-                snprintf(g_buf, sizeof(g_buf), "G:%u.%02ug  PK:%u.%02ug",
+                snprintf(g_buf, sizeof(g_buf), "G-FORCE: %u.%02ug  |  PEAK: %u.%02ug",
                          g_int, g_dec, p_int, p_dec);
-                lcd_text_draw_padded(20, 172, g_buf, 20, 1, COL_WHITE, COL_CARD_BG);
-
-                /* Mini Real-Time Acceleration Gauge (x: 180, y: 184, w: 120, h: 10) */
-                /* Range: 0 to 3500 mg */
-                uint32_t bar_w = (r_smooth_mg * 120) / 3500;
-                if (bar_w > 120) bar_w = 120;
-
-                if (bar_w != last_disp_bar_w) {
-                    last_disp_bar_w = bar_w;
-                    uint16_t bar_col = COL_CYAN;
-                    if (r_smooth_mg < 800) {
-                        bar_col = COL_PURPLE;      /* Weightless dip */
-                    } else if (r_smooth_mg > 1800) {
-                        bar_col = COL_RED;         /* High impact */
-                    } else if (r_smooth_mg > 1400) {
-                        bar_col = COL_ORANGE;      /* Push-off thrust */
-                    }
-
-                    if (bar_w > 0) {
-                        st7789_fill_rect(180, 184, (uint16_t)bar_w, 10, bar_col);
-                    }
-                    if (bar_w < 120) {
-                        st7789_fill_rect(180 + (uint16_t)bar_w, 184, (uint16_t)(120 - bar_w), 10, COL_TRACK);
-                    }
-                    /* Draw 1.0g reference tick mark at 1000/3500 * 120 = 34 px */
-                    st7789_fill_rect(180 + 34, 182, 1, 14, COL_WHITE);
-                }
+                lcd_text_draw_padded(36, 196, g_buf, 32, 1, COL_MUTED, COL_BG_BLACK);
             }
         }
 

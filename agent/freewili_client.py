@@ -37,6 +37,7 @@ class FreeWiliTelemetry:
         self.state_name = STATE_NAMES.get(state, "UNKNOWN")
         self.g_mg = g_mg
         self.peak_mg = peak_mg
+        self.peak_g_mg = peak_mg
         self.timestamp = time.time()
 
     @classmethod
